@@ -14,6 +14,8 @@ struct RootView: View {
     }
 }
 
+// MARK: - Søg
+
 struct SearchPage: View {
     @EnvironmentObject var app: AppState
 
@@ -95,6 +97,8 @@ struct ProductRow: View {
     }
 }
 
+// MARK: - Indkøbsliste
+
 struct ListPage: View {
     @EnvironmentObject var app: AppState
     @State private var isFinding = false
@@ -148,26 +152,51 @@ struct ListPage: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(isFinding)
 
+                    // RESULTAT + "Du sparer X kr."
                     if !results.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Billigste butikker").font(.headline)
-                            ForEach(results) { r in
-                                HStack {
-                                    Text(r.storeName)
-                                    Spacer()
-                                    Text(String(format: "DKK %.2f", r.total)).monospaced()
+                        // results er allerede top-2 med lavest pris først
+                        let cheapest = results[0]
+                        let second   = results.count > 1 ? results[1] : nil
+                        let savings  = second != nil ? max(0, second!.total - cheapest.total) : 0
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            // Konklusion
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("🏆 Billigst hos \(cheapest.storeName)")
+                                    .font(.headline)
+                                Text("Samlet pris: \(String(format: "DKK %.2f", cheapest.total))")
+                                    .monospaced()
+                                if let sec = second {
+                                    Text("💸 Du sparer \(String(format: "DKK %.2f", savings)) i forhold til \(sec.storeName)")
+                                        .font(.headline)
+                                        .foregroundStyle(.green)
                                 }
                             }
+
+                            // Begge butikker med total
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Butikker")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                ForEach(results) { r in
+                                    HStack {
+                                        Text(r.storeName)
+                                        Spacer()
+                                        Text(String(format: "DKK %.2f", r.total)).monospaced()
+                                    }
+                                }
+                            }
+
+                            Button {
+                                app.commitCurrentListToHistory()
+                                results = []
+                            } label: {
+                                Label("Gem som handlet", systemImage: "archivebox")
+                            }
+                            .buttonStyle(.bordered)
+                            .padding(.top, 4)
                         }
                         .padding(.top, 8)
-
-                        Button {
-                            app.commitCurrentListToHistory()
-                            results = []
-                        } label: {
-                            Label("Gem som handlet", systemImage: "archivebox")
-                        }
-                        .buttonStyle(.bordered)
                     }
                 }
             }
@@ -206,6 +235,8 @@ struct ListPage: View {
         }
     }
 }
+
+// MARK: - Historik
 
 struct HistoryPage: View {
     @EnvironmentObject var app: AppState
