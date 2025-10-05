@@ -28,7 +28,7 @@ targets:
     settings:
       base:
         SWIFT_VERSION: 5.0
-        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_STYLE: Manual
         DEVELOPMENT_TEAM: GUYJ52Y55V         # ← dit Team ID
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
 

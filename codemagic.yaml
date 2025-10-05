@@ -10,15 +10,39 @@ workflows:
         ASC_KEY_ID: ${ASC_KEY_ID}
         ASC_PRIVATE_KEY: ${ASC_PRIVATE_KEY}
         APPLE_APP_ID: ${APPLE_APP_ID}
+
     scripts:
-      - name: Install XcodeGen
+      - name: Install tools
         script: |
           set -euxo pipefail
           brew install xcodegen
+          pip3 install --upgrade codemagic-cli-tools
+
       - name: Generate Xcode project
         script: |
           set -euxo pipefail
           xcodegen generate --spec project.yml
+
+      - name: Fetch signing files (cert+profiles) from App Store Connect
+        script: |
+          set -euxo pipefail
+          app-store-connect fetch-signing-files \
+            --issuer-id "$ASC_ISSUER_ID" \
+            --key-id "$ASC_KEY_ID" \
+            --private-key "$ASC_PRIVATE_KEY" \
+            --app-identifier "$APP_BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Import certs & apply profiles to Xcode project
+        script: |
+          set -euxo pipefail
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles \
+            --project SmartKurv.xcodeproj \
+            --target SmartKurv
+
       - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
@@ -27,7 +51,10 @@ workflows:
             -scheme SmartKurv \
             -configuration Release \
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
-            -sdk iphoneos archive
+            -sdk iphoneos \
+            -allowProvisioningUpdates \
+            archive
+
       - name: Write exportOptions.plist (App Store)
         script: |
           set -euxo pipefail
@@ -43,7 +70,7 @@ workflows:
           </dict>
           </plist>
           PLIST
-          cat $CM_BUILD_DIR/exportOptions.plist
+
       - name: Export .ipa
         script: |
           set -euxo pipefail
@@ -51,6 +78,7 @@ workflows:
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
             -exportOptionsPlist $CM_BUILD_DIR/exportOptions.plist \
             -exportPath $CM_BUILD_DIR/exported
+
       - name: Publish to TestFlight
         script: |
           set -euxo pipefail
@@ -61,5 +89,6 @@ workflows:
             --path "$CM_BUILD_DIR/exported/SmartKurv.ipa" \
             --bundle-id "$APP_BUNDLE_ID" \
             --apple-id "$APPLE_APP_ID"
+
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
