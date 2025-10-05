@@ -14,9 +14,12 @@ targets:
           - Assets.xcassets/**/*
           - README.md
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
-      INFOPLIST_FILE: Info.plist
-      SWIFT_VERSION: 5.0
-      DEVELOPMENT_TEAM: ""
+  base:
+    SWIFT_VERSION: 5.0
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
+    INFOPLIST_FILE: Info.plist
+
     scheme:
       testTargets: []
