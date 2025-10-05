@@ -6,18 +6,27 @@ workflows:
     scripts:
       - name: Install XcodeGen
         script: |
+          set -euxo pipefail
           brew install xcodegen
       - name: Generate Xcode project
         script: |
-          xcodegen generate
+          set -euxo pipefail
+          xcodegen generate --spec project.yml
+          test -d SmartKurv.xcodeproj
           ls -la
       - name: Build archive
         script: |
-          xcodebuild -scheme SmartKurv -configuration Release \
+          set -euxo pipefail
+          xcodebuild \
+            -project SmartKurv.xcodeproj \
+            -scheme SmartKurv \
+            -configuration Release \
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
-            -sdk iphoneos archive CODE_SIGNING_ALLOWED=NO
+            -sdk iphoneos \
+            archive CODE_SIGNING_ALLOWED=NO
       - name: Export .ipa (ad-hoc unsigned)
         script: |
+          set -euxo pipefail
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
             -exportOptionsPlist <(cat << 'EOF'
