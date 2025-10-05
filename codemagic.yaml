@@ -1,8 +1,15 @@
 workflows:
-  ios_build:
-    name: SmartKurv iOS build
+  ios_release:
+    name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
+      vars:
+        APP_BUNDLE_ID: com.youssef19900.SmartKurv
+        TEAM_ID: GUYJ52Y55V
+        ASC_ISSUER_ID: ${ASC_ISSUER_ID}
+        ASC_KEY_ID: ${ASC_KEY_ID}
+        ASC_PRIVATE_KEY: ${ASC_PRIVATE_KEY}
+        APPLE_APP_ID: ${APPLE_APP_ID}
     scripts:
       - name: Install XcodeGen
         script: |
@@ -12,9 +19,7 @@ workflows:
         script: |
           set -euxo pipefail
           xcodegen generate --spec project.yml
-          test -d SmartKurv.xcodeproj
-          ls -la
-      - name: Build archive (no codesign)
+      - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
           xcodebuild \
@@ -22,26 +27,39 @@ workflows:
             -scheme SmartKurv \
             -configuration Release \
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
-            -sdk iphoneos \
-            archive CODE_SIGNING_ALLOWED=NO
-      - name: Write exportOptions.plist
+            -sdk iphoneos archive
+      - name: Write exportOptions.plist (App Store)
         script: |
           set -euxo pipefail
           cat > $CM_BUILD_DIR/exportOptions.plist << 'PLIST'
-          {
-            "method": "ad-hoc",
-            "compileBitcode": false,
-            "signingStyle": "manual",
-            "stripSwiftSymbols": true
-          }
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>uploadSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
           PLIST
           cat $CM_BUILD_DIR/exportOptions.plist
-      - name: Export .ipa (unsigned)
+      - name: Export .ipa
         script: |
           set -euxo pipefail
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
             -exportOptionsPlist $CM_BUILD_DIR/exportOptions.plist \
             -exportPath $CM_BUILD_DIR/exported
+      - name: Publish to TestFlight
+        script: |
+          set -euxo pipefail
+          app-store-connect publish \
+            --issuer-id "$ASC_ISSUER_ID" \
+            --key-id "$ASC_KEY_ID" \
+            --private-key "$ASC_PRIVATE_KEY" \
+            --path "$CM_BUILD_DIR/exported/SmartKurv.ipa" \
+            --bundle-id "$APP_BUNDLE_ID" \
+            --apple-id "$APPLE_APP_ID"
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
