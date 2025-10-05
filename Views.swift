@@ -1,6 +1,29 @@
 import SwiftUI
 import CoreLocation
 
+// En simpel tom-tilstand der virker på iOS 16+
+struct EmptyState: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+}
+
 struct RootView: View {
     var body: some View {
         TabView {
@@ -30,10 +53,10 @@ struct SearchPage: View {
                 }
 
                 if app.searchResults.isEmpty {
-                    ContentUnavailableView(
-                        "Ingen resultater endnu",
-                        systemImage: "text.magnifyingglass",
-                        description: Text("Skriv en vare og tryk Søg.")
+                    EmptyState(
+                        title: "Ingen resultater endnu",
+                        subtitle: "Skriv en vare og tryk Søg.",
+                        systemImage: "text.magnifyingglass"
                     )
                 } else {
                     List(app.searchResults, id: \.id) { product in
@@ -109,10 +132,10 @@ struct ListPage: View {
         NavigationStack {
             VStack(spacing: 12) {
                 if app.currentList.items.isEmpty {
-                    ContentUnavailableView(
-                        "Tom indkøbsliste",
-                        systemImage: "cart",
-                        description: Text("Tilføj varer fra Søg.")
+                    EmptyState(
+                        title: "Tom indkøbsliste",
+                        subtitle: "Tilføj varer fra Søg.",
+                        systemImage: "cart"
                     )
                 } else {
                     List {
@@ -122,7 +145,7 @@ struct ListPage: View {
                                     Text(item.product.name).font(.headline)
                                     Text("\(item.variant.organic ? "Øko " : "")\(item.variant.unit)")
                                         .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundColor(.secondary)
                                 }
                                 Spacer()
                                 HStack(spacing: 8) {
@@ -154,7 +177,6 @@ struct ListPage: View {
 
                     // RESULTAT + "Du sparer X kr."
                     if !results.isEmpty {
-                        // results er allerede top-2 med lavest pris først
                         let cheapest = results[0]
                         let second   = results.count > 1 ? results[1] : nil
                         let savings  = second != nil ? max(0, second!.total - cheapest.total) : 0
@@ -169,7 +191,7 @@ struct ListPage: View {
                                 if let sec = second {
                                     Text("💸 Du sparer \(String(format: "DKK %.2f", savings)) i forhold til \(sec.storeName)")
                                         .font(.headline)
-                                        .foregroundStyle(.green)
+                                        .foregroundColor(.green)
                                 }
                             }
 
@@ -177,7 +199,7 @@ struct ListPage: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Butikker")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundColor(.secondary)
                                 ForEach(results) { r in
                                     HStack {
                                         Text(r.storeName)
@@ -244,10 +266,10 @@ struct HistoryPage: View {
     var body: some View {
         NavigationStack {
             if app.history.isEmpty {
-                ContentUnavailableView(
-                    "Ingen historik endnu",
-                    systemImage: "clock",
-                    description: Text("Når du markerer en liste som handlet, vises den her.")
+                EmptyState(
+                    title: "Ingen historik endnu",
+                    subtitle: "Når du markerer en liste som handlet, vises den her.",
+                    systemImage: "clock"
                 )
                 .navigationTitle("Historik")
             } else {
@@ -260,7 +282,7 @@ struct HistoryPage: View {
                                         Text(item.product.name).font(.body)
                                         Text("\(item.variant.organic ? "Øko " : "")\(item.variant.unit)")
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundColor(.secondary)
                                     }
                                     Spacer()
                                     Text("x\(item.qty)")
