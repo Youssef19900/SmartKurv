@@ -8,7 +8,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
 
-    # Kildemappe
+    # Kode
     sources:
       - path: .
         excludes:
@@ -16,18 +16,22 @@ targets:
           - codemagic.yaml
           - README.md
 
-    # Ressourcer (så catalog.json og evt. assets kommer med i appen)
+    # Ressourcer
     resources:
       - path: Assets.xcassets
       - path: catalog.json
 
+    # Plist via "info:" (sikrere end kun settings)
+    info:
+      path: Info.plist
+
     settings:
       base:
         SWIFT_VERSION: 5.0
+        ENABLE_PREVIEWS: NO           # slå SwiftUI previews fra i build
         CODE_SIGN_STYLE: Manual
         DEVELOPMENT_TEAM: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
-        INFOPLIST_FILE: Info.plist
 
     scheme:
       testTargets: []
