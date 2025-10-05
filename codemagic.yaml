@@ -14,7 +14,7 @@ workflows:
           xcodegen generate --spec project.yml
           test -d SmartKurv.xcodeproj
           ls -la
-      - name: Build archive
+      - name: Build archive (no codesign)
         script: |
           set -euxo pipefail
           xcodebuild \
@@ -24,19 +24,24 @@ workflows:
             -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
             -sdk iphoneos \
             archive CODE_SIGNING_ALLOWED=NO
-      - name: Export .ipa (ad-hoc unsigned)
+      - name: Write exportOptions.plist
         script: |
           set -euxo pipefail
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
-            -exportOptionsPlist <(cat << 'EOF'
+          cat > $CM_BUILD_DIR/exportOptions.plist << 'PLIST'
           {
             "method": "ad-hoc",
             "compileBitcode": false,
             "signingStyle": "manual",
             "stripSwiftSymbols": true
           }
-          EOF
-          ) -exportPath $CM_BUILD_DIR/exported
+          PLIST
+          cat $CM_BUILD_DIR/exportOptions.plist
+      - name: Export .ipa (unsigned)
+        script: |
+          set -euxo pipefail
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
+            -exportOptionsPlist $CM_BUILD_DIR/exportOptions.plist \
+            -exportPath $CM_BUILD_DIR/exported
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
