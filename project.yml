@@ -1,0 +1,22 @@
+name: SmartKurv
+options:
+  minimumXcodeGenVersion: 2.37.0
+targets:
+  SmartKurv:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: .
+        excludes:
+          - project.yml
+          - codemagic.yaml
+          - Assets.xcassets/**/*
+          - README.md
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
+      INFOPLIST_FILE: Info.plist
+      SWIFT_VERSION: 5.0
+      DEVELOPMENT_TEAM: ""
+    scheme:
+      testTargets: []

@@ -1,0 +1,33 @@
+workflows:
+  ios_build:
+    name: SmartKurv iOS build
+    environment:
+      xcode: latest
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+          ls -la
+      - name: Build archive
+        script: |
+          xcodebuild -scheme SmartKurv -configuration Release \
+            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
+            -sdk iphoneos archive CODE_SIGNING_ALLOWED=NO
+      - name: Export .ipa (ad-hoc unsigned)
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
+            -exportOptionsPlist <(cat << 'EOF'
+          {
+            "method": "ad-hoc",
+            "compileBitcode": false,
+            "signingStyle": "manual",
+            "stripSwiftSymbols": true
+          }
+          EOF
+          ) -exportPath $CM_BUILD_DIR/exported
+    artifacts:
+      - $CM_BUILD_DIR/exported/*.ipa
