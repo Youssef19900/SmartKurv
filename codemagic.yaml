@@ -4,26 +4,26 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal indeholde: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
+        - smartkurv   # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
 
     scripts:
-      - name: Install tools
+      - name: "Install tools"
         script: |
           set -euxo pipefail
           brew install xcodegen
           pip3 install --upgrade codemagic-cli-tools
 
-      - name: Regenerate project (fresh)
+      - name: "Regenerate project (fresh)"
         script: |
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: Reset signing keys inside .xcodeproj (aggressiv)
+      - name: "Reset signing keys inside .xcodeproj (aggressive)"
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
@@ -44,16 +44,16 @@ workflows:
           # Vis relevante linjer
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
-      - name: Guard: ingen gamle cert-navne tilbage
+      - name: "Guard - no old cert CNs remain"
         script: |
           set -euxo pipefail
           if grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj | grep -v 'CODE_SIGN_IDENTITY = "Apple Distribution";' ; then
-            echo "Fandt stadig en navngiven Apple Distribution-CN i projektfilen. Stopper."
+            echo "Found a named Apple Distribution CN in project file. Stopping."
             grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj || true
             exit 1
           fi
 
-      - name: Generate CSR key & fetch signing files
+      - name: "Generate CSR key & fetch signing files"
         script: |
           set -euo pipefail
 
@@ -81,23 +81,23 @@ workflows:
           # Ryd op
           rm -f "$CERT_KEY_PATH"
 
-      - name: Import certs & apply profiles
+      - name: "Import certs & apply profiles"
         script: |
           set -euxo pipefail
           keychain initialize
           keychain add-certificates --certificate-password "$P12_PASSWORD"
           xcode-project use-profiles --project SmartKurv.xcodeproj
 
-      - name: Diagnose signing state
+      - name: "Diagnose signing state"
         script: |
           set -euxo pipefail
           echo "== Keychain identities =="
           security find-identity -p codesigning -v || true
-          echo "== Build settings (uddrag) =="
+          echo "== Build settings (excerpt) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
-      - name: Build archive (codesigned)
+      - name: "Build archive (codesigned)"
         script: |
           set -euxo pipefail
           xcodebuild \
@@ -111,7 +111,7 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      - name: Write exportOptions.plist (App Store)
+      - name: "Write exportOptions.plist (App Store)"
         script: |
           set -euxo pipefail
           cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
@@ -127,7 +127,7 @@ workflows:
           </plist>
           PLIST
 
-      - name: Export .ipa
+      - name: "Export .ipa"
         script: |
           set -euxo pipefail
           xcodebuild -exportArchive \
@@ -135,7 +135,7 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      - name: Publish to TestFlight
+      - name: "Publish to TestFlight"
         script: |
           set -euxo pipefail
           app-store-connect publish \
