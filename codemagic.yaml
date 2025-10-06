@@ -3,36 +3,42 @@ workflows:
     name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
+      groups:
+        - appstore_api            # <- gruppen du lavede fra integrationen
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
-        # Sæt dette til dit numeriske App Store Connect app-id (fx 1234567890)
-        APPLE_APP_ID: 6753662256
+        APPLE_APP_ID: 6753662256  # <- Sæt dit rigtige numeriske Apple ID her
 
     scripts:
-      # Værktøjer
       - name: Install tools
         script: |
           set -euxo pipefail
           brew install xcodegen
           pip3 install --upgrade codemagic-cli-tools
 
-      # Generér Xcode-projekt fra project.yml (XcodeGen)
       - name: Generate Xcode project
         script: |
           set -euxo pipefail
           xcodegen generate --spec project.yml
 
-      # Hent/opsæt code signing automatisk via integrationen
+      - name: Check App Store Connect env (fra integration)
+        script: |
+          set -euxo pipefail
+          test -n "$APP_STORE_CONNECT_ISSUER_ID" && echo "ISSUER OK"
+          test -n "$APP_STORE_CONNECT_KEY_IDENTIFIER" && echo "KEY_ID OK"
+          test -n "$APP_STORE_CONNECT_PRIVATE_KEY" && echo "PRIVATE_KEY OK"
+
       - name: Fetch signing files (certificates + profiles)
         script: |
           set -euxo pipefail
-          # Bemærk: INGEN --issuer-id/--key-id/--private-key/--certificate-key
+          # Integration leverer nøgler via env-variablerne ovenfor
           app-store-connect fetch-signing-files \
             "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
-          # Til oprydning af gamle profiler kan du tilføje: --delete-stale-profiles
+          # Hvis du vil rydde gamle profiler op:
+          #   ... --delete-stale-profiles
 
       - name: Import certs & apply profiles to Xcode project
         script: |
@@ -43,7 +49,6 @@ workflows:
             --project SmartKurv.xcodeproj \
             --target SmartKurv
 
-      # Build & archive (codesigned)
       - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
@@ -56,7 +61,6 @@ workflows:
             -allowProvisioningUpdates \
             archive
 
-      # Eksportér IPA til upload
       - name: Write exportOptions.plist (App Store)
         script: |
           set -euxo pipefail
@@ -81,7 +85,6 @@ workflows:
             -exportOptionsPlist $CM_BUILD_DIR/exportOptions.plist \
             -exportPath $CM_BUILD_DIR/exported
 
-      # Upload til TestFlight (kræver at APPLE_APP_ID er sat korrekt)
       - name: Publish to TestFlight
         script: |
           set -euxo pipefail
@@ -91,3 +94,4 @@ workflows:
 
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
+      - $CM_BUILD_DIR/SmartKurv.xcarchive
