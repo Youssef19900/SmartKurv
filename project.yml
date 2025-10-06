@@ -8,29 +8,29 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
 
-    # Kode
     sources:
       - path: .
         excludes:
           - project.yml
           - codemagic.yaml
           - README.md
+          - .git
+          - .github
 
-    # Ressourcer
     resources:
-      - path: Assets.xcassets
-      - path: catalog.json
+      - Assets.xcassets
+      - catalog.json
 
-    # Plist
     info:
       path: Info.plist
 
     settings:
       base:
         SWIFT_VERSION: 5.0
-        CODE_SIGN_STYLE: Manual
-        DEVELOPMENT_TEAM: GUYJ52Y55V         # ← dit Team ID
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
+        DEVELOPMENT_TEAM: GUYJ52Y55V
+        CODE_SIGN_STYLE: Manual   # brug Manual når vi anvender use-profiles i Codemagic
 
     scheme:
+      name: SmartKurv
       testTargets: []
