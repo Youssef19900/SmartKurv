@@ -49,13 +49,13 @@ workflows:
       # 🟢 === LØSNING B SLUT ===
 
       - name: Import certs & apply profiles to Xcode project
-        script: |
-          set -euxo pipefail
-          keychain initialize
-          keychain add-certificates
-          xcode-project use-profiles \
-            --project SmartKurv.xcodeproj \
-            --target SmartKurv
+  script: |
+    set -euxo pipefail
+    keychain initialize
+    # Hvis din .p12 er beskyttet med adgangskode, se punkt 2 herunder
+    keychain add-certificates
+    # <-- fjern --target SmartKurv
+    xcode-project use-profiles --project SmartKurv.xcodeproj
 
       - name: Build archive (codesigned)
         script: |
