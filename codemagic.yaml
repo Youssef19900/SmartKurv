@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
+        - smartkurv   # Skal have: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -36,19 +36,12 @@ workflows:
             "$PBX" || true
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
-      - name: "Import existing .p12 into keychain"
+      - name: "Import existing .p12 from Code signing"
         script: |
           set -euxo pipefail
           keychain initialize
-          # Codemagic lægger .p12 i build-mappen hvis den er uploadet under Code signing (iOS).
-          # Prøv både Code signing-sti og Secure files:
-          P12_PATH="$(ls "$CM_BUILD_DIR"/**/*.p12 "$CM_BUILD_DIR"/secure_files/*.p12 2>/dev/null | head -n 1 || true)"
-          if [ -z "${P12_PATH:-}" ]; then
-            echo "Kunne ikke finde en .p12 i build-miljøet. Upload din AppleDistribution.p12 i Code signing (iOS) eller som Secure file."
-            exit 1
-          fi
-          echo "Bruger p12: $P12_PATH"
-          keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
+          # HENTER automatisk p12 fra App settings → Code signing (iOS)
+          keychain add-certificates --certificate-password "$P12_PASSWORD"
 
       - name: "Fetch provisioning profiles (no new certs)"
         script: |
@@ -70,7 +63,6 @@ workflows:
           set -euxo pipefail
           PROFILES_DIR="$CM_BUILD_DIR/profiles"
           xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$PROFILES_DIR"
-          # Diagnose
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
