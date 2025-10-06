@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal have: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
+        - smartkurv   # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -36,12 +36,28 @@ workflows:
             "$PBX" || true
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
-      - name: "Import existing .p12 from Code signing"
+      - name: "Import existing .p12 from Secure files"
         script: |
           set -euxo pipefail
           keychain initialize
-          # HENTER automatisk p12 fra App settings → Code signing (iOS)
-          keychain add-certificates --certificate-password "$P12_PASSWORD"
+
+          echo "== List secure files =="
+          ls -la "$CM_BUILD_DIR/secure_files" || true
+
+          # Brug eksplicit sti til din uploadede p12
+          P12_PATH="$CM_BUILD_DIR/secure_files/AppleDistribution.p12"
+          if [ ! -f "$P12_PATH" ]; then
+            # fallback: tag første .p12 i secure_files, hvis navnet afviger
+            P12_PATH="$(ls "$CM_BUILD_DIR"/secure_files/*.p12 2>/dev/null | head -n1 || true)"
+          fi
+
+          if [ -z "${P12_PATH:-}" ] || [ ! -f "$P12_PATH" ]; then
+            echo "Fandt ingen .p12 i Secure files. Upload AppleDistribution.p12 under App settings → Secure files."
+            exit 1
+          fi
+
+          echo "Importer p12: $P12_PATH"
+          keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
 
       - name: "Fetch provisioning profiles (no new certs)"
         script: |
