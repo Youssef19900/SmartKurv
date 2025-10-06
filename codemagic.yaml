@@ -30,32 +30,35 @@ workflows:
           openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
           test -s "$CM_BUILD_DIR/cert_key.pem"
 
-      - name: Fetch signing files (certificates + profiles)
-        script: |
-          set -euxo pipefail
-          echo "Fetching signing files using Apple API integration..."
+       - name: Fetch signing files (certificates + profiles)
+  script: |
+    set -euxo pipefail
+    echo "Fetching signing files using Apple API integration..."
+    # midlertidig key til CSR
+    openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
+    CERT_KEY_CONTENT="$(cat "$CM_BUILD_DIR/cert_key.pem")"
 
-          CERT_KEY_CONTENT="$(cat "$CM_BUILD_DIR/cert_key.pem")"
+    app-store-connect fetch-signing-files \
+      "$APP_BUNDLE_ID" \
+      --type IOS_APP_STORE \
+      --create \
+      --delete-stale-profiles \
+      --certificate-key "$CERT_KEY_CONTENT" \
+      --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+      --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+      --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+      --p12-password "$P12_PASSWORD"
 
-          app-store-connect fetch-signing-files \
-            "$APP_BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --delete-stale-profiles \
-            --certificate-key "$CERT_KEY_CONTENT" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
       # 🟢 === LØSNING B SLUT ===
 
-      - name: Import certs & apply profiles to Xcode project
+     - name: Import certs & apply profiles to Xcode project
   script: |
     set -euxo pipefail
     keychain initialize
-    # Hvis din .p12 er beskyttet med adgangskode, se punkt 2 herunder
-    keychain add-certificates
-    # <-- fjern --target SmartKurv
+    # Brug samme password som ved fetch-signing-files
+    keychain add-certificates --certificate-password "$P12_PASSWORD"
     xcode-project use-profiles --project SmartKurv.xcodeproj
+
 
       - name: Build archive (codesigned)
         script: |
