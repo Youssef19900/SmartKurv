@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - appstore_api            # <- gruppen du lavede fra integrationen
+        - smartkurv            # <- gruppen du lavede fra integrationen
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
