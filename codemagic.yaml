@@ -4,11 +4,11 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv    # <- den variable-gruppe hvor dine 3 API nøgler ligger
+        - smartkurv    # variabelgruppe med APP_STORE_CONNECT_* + P12_PASSWORD m.m.
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
-        APPLE_APP_ID: 6753662256  # <- erstat med dit rigtige tal fra App Store Connect
+        APPLE_APP_ID: "6753662256"  # tal som streng er safest i YAML
 
     scripts:
       - name: Install tools
@@ -30,35 +30,31 @@ workflows:
           openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
           test -s "$CM_BUILD_DIR/cert_key.pem"
 
-       - name: Fetch signing files (certificates + profiles)
-  script: |
-    set -euxo pipefail
-    echo "Fetching signing files using Apple API integration..."
-    # midlertidig key til CSR
-    openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
-    CERT_KEY_CONTENT="$(cat "$CM_BUILD_DIR/cert_key.pem")"
+      - name: Fetch signing files (certificates + profiles)
+        script: |
+          set -euxo pipefail
+          echo "Fetching signing files using Apple API integration..."
+          CERT_KEY_CONTENT="$(cat "$CM_BUILD_DIR/cert_key.pem")"
 
-    app-store-connect fetch-signing-files \
-      "$APP_BUNDLE_ID" \
-      --type IOS_APP_STORE \
-      --create \
-      --delete-stale-profiles \
-      --certificate-key "$CERT_KEY_CONTENT" \
-      --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-      --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-      --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-      --p12-password "$P12_PASSWORD"
-
+          app-store-connect fetch-signing-files \
+            "$APP_BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --delete-stale-profiles \
+            --certificate-key "$CERT_KEY_CONTENT" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --p12-password "$P12_PASSWORD"
       # 🟢 === LØSNING B SLUT ===
 
-     - name: Import certs & apply profiles to Xcode project
-  script: |
-    set -euxo pipefail
-    keychain initialize
-    # Brug samme password som ved fetch-signing-files
-    keychain add-certificates --certificate-password "$P12_PASSWORD"
-    xcode-project use-profiles --project SmartKurv.xcodeproj
-
+      - name: Import certs & apply profiles to Xcode project
+        script: |
+          set -euxo pipefail
+          keychain initialize
+          # Brug samme password som ved fetch-signing-files
+          keychain add-certificates --certificate-password "$P12_PASSWORD"
+          xcode-project use-profiles --project SmartKurv.xcodeproj
 
       - name: Build archive (codesigned)
         script: |
@@ -67,7 +63,7 @@ workflows:
             -project SmartKurv.xcodeproj \
             -scheme SmartKurv \
             -configuration Release \
-            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
+            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -sdk iphoneos \
             -allowProvisioningUpdates \
             archive
@@ -75,7 +71,7 @@ workflows:
       - name: Write exportOptions.plist (App Store)
         script: |
           set -euxo pipefail
-          cat > $CM_BUILD_DIR/exportOptions.plist << 'PLIST'
+          cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -92,9 +88,9 @@ workflows:
         script: |
           set -euxo pipefail
           xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/SmartKurv.xcarchive \
-            -exportOptionsPlist $CM_BUILD_DIR/exportOptions.plist \
-            -exportPath $CM_BUILD_DIR/exported
+            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
+            -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
+            -exportPath "$CM_BUILD_DIR/exported"
 
       - name: Publish to TestFlight
         script: |
@@ -104,4 +100,4 @@ workflows:
             --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
 
     artifacts:
-      - $CM_BUILD_DIR/exported/*.ipa
+      - "$CM_BUILD_DIR/exported/*.ipa"
