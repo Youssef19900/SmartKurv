@@ -36,27 +36,33 @@ workflows:
             "$PBX" || true
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
-      - name: Create temporary private key for certificate CSR
-        script: |
-          set -euxo pipefail
-          trap 'rm -f "$CM_BUILD_DIR/cert_key.pem"' EXIT
-          openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
-          test -s "$CM_BUILD_DIR/cert_key.pem"
+- name: Generate CSR key & fetch signing files
+  script: |
+    set -euo pipefail
 
-      - name: Fetch signing files (certificates + profiles)
-        script: |
-          set -euxo pipefail
-          CERT_KEY_CONTENT="$(cat "$CM_BUILD_DIR/cert_key.pem")"
-          app-store-connect fetch-signing-files \
-            "$APP_BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --delete-stale-profiles \
-            --certificate-key "$CERT_KEY_CONTENT" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --p12-password "$P12_PASSWORD"
+    CERT_KEY_PATH="$CM_BUILD_DIR/cert_key.pem"
+    # Generér midlertidig key til CSR
+    openssl genrsa -out "$CERT_KEY_PATH" 2048
+    test -s "$CERT_KEY_PATH"
+
+    # Undgå at nøgleindhold ender i log (slå xtrace fra, slå til igen bagefter)
+    set +x
+    CERT_KEY_CONTENT="$(cat "$CERT_KEY_PATH")"
+    set -x
+
+    app-store-connect fetch-signing-files \
+      "$APP_BUNDLE_ID" \
+      --type IOS_APP_STORE \
+      --create \
+      --delete-stale-profiles \
+      --certificate-key "$CERT_KEY_CONTENT" \
+      --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+      --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+      --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+      --p12-password "$P12_PASSWORD"
+
+    # Ryd op
+    rm -f "$CERT_KEY_PATH"
 
       - name: Import certs & apply profiles
         script: |
