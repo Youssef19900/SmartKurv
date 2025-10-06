@@ -4,85 +4,34 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
+        - smartkurv   # Din variabelgruppe (indeholder APP_STORE_CONNECT_* og P12_PASSWORD)
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
 
     scripts:
-      - name: "Install tools"
+      - name: Install dependencies
         script: |
           set -euxo pipefail
           brew install xcodegen
           pip3 install --upgrade codemagic-cli-tools
 
-      - name: "Regenerate project (fresh)"
+      - name: Generate Xcode project
         script: |
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: "Sanity: ensure manual signing and no hardcoded CNs"
+      - name: Import signing certificates and profiles
         script: |
           set -euxo pipefail
-          PBX="SmartKurv.xcodeproj/project.pbxproj"
-          cp "$PBX" "$PBX.bak" || true
-          /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
-          /usr/bin/sed -i '' \
-            -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' \
-            -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' \
-            -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
-            "$PBX" || true
-          grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
-
-      - name: "Import existing .p12 from Secure files"
-        script: |
-          set -euxo pipefail
+          echo "🔐 Importing Apple Distribution certificate from Codemagic Code Signing..."
           keychain initialize
+          keychain add-certificates --certificate-password "$P12_PASSWORD"
+          xcode-project use-profiles --project SmartKurv.xcodeproj
 
-          echo "== List secure files =="
-          ls -la "$CM_BUILD_DIR/secure_files" || true
-
-          # Brug eksplicit sti til din uploadede p12
-          P12_PATH="$CM_BUILD_DIR/secure_files/AppleDistribution.p12"
-          if [ ! -f "$P12_PATH" ]; then
-            # fallback: tag første .p12 i secure_files, hvis navnet afviger
-            P12_PATH="$(ls "$CM_BUILD_DIR"/secure_files/*.p12 2>/dev/null | head -n1 || true)"
-          fi
-
-          if [ -z "${P12_PATH:-}" ] || [ ! -f "$P12_PATH" ]; then
-            echo "Fandt ingen .p12 i Secure files. Upload AppleDistribution.p12 under App settings → Secure files."
-            exit 1
-          fi
-
-          echo "Importer p12: $P12_PATH"
-          keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
-
-      - name: "Fetch provisioning profiles (no new certs)"
-        script: |
-          set -euxo pipefail
-          PROFILES_DIR="$CM_BUILD_DIR/profiles"
-          mkdir -p "$PROFILES_DIR"
-          app-store-connect fetch-profiles \
-            "$APP_BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --download-directory "$PROFILES_DIR"
-          echo "Profiler hentet:"
-          ls -la "$PROFILES_DIR" || true
-
-      - name: "Apply profiles to Xcode project"
-        script: |
-          set -euxo pipefail
-          PROFILES_DIR="$CM_BUILD_DIR/profiles"
-          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$PROFILES_DIR"
-          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
-
-      - name: "Build archive (codesigned)"
+      - name: Build and archive app
         script: |
           set -euxo pipefail
           xcodebuild \
@@ -92,11 +41,12 @@ workflows:
             -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -sdk iphoneos \
             -allowProvisioningUpdates \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
 
-      - name: "Write exportOptions.plist (App Store)"
+      - name: Create exportOptions.plist
         script: |
           set -euxo pipefail
           cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
@@ -112,7 +62,7 @@ workflows:
           </plist>
           PLIST
 
-      - name: "Export .ipa"
+      - name: Export .ipa
         script: |
           set -euxo pipefail
           xcodebuild -exportArchive \
@@ -120,9 +70,10 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      - name: "Publish to TestFlight"
+      - name: Upload to TestFlight
         script: |
           set -euxo pipefail
+          echo "📦 Uploading build to TestFlight..."
           app-store-connect publish \
             --apple-id "$APPLE_APP_ID" \
             --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
