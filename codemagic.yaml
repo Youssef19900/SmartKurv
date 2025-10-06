@@ -23,75 +23,54 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: "Reset signing keys inside .xcodeproj (aggressive)"
+      - name: "Sanity: ensure manual signing and no hardcoded CNs"
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
           cp "$PBX" "$PBX.bak" || true
-          /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX"
+          /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           /usr/bin/sed -i '' \
+            -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' \
             -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' \
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
-            "$PBX"
-          /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX"
+            "$PBX" || true
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
-      - name: "Guard - no old cert CNs remain"
+      - name: "Import existing .p12 into keychain"
         script: |
           set -euxo pipefail
-          if grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj | grep -v 'CODE_SIGN_IDENTITY = "Apple Distribution";' ; then
-            echo "Found a named Apple Distribution CN in project file. Stopping."
-            grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj || true
+          keychain initialize
+          # Codemagic lægger .p12 i build-mappen hvis den er uploadet under Code signing (iOS).
+          # Prøv både Code signing-sti og Secure files:
+          P12_PATH="$(ls "$CM_BUILD_DIR"/**/*.p12 "$CM_BUILD_DIR"/secure_files/*.p12 2>/dev/null | head -n 1 || true)"
+          if [ -z "${P12_PATH:-}" ]; then
+            echo "Kunne ikke finde en .p12 i build-miljøet. Upload din AppleDistribution.p12 i Code signing (iOS) eller som Secure file."
             exit 1
           fi
+          echo "Bruger p12: $P12_PATH"
+          keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
 
-      - name: "Generate CSR key & fetch signing files (to known folder)"
+      - name: "Fetch provisioning profiles (no new certs)"
         script: |
-          set -euo pipefail
-          SIGNING_DIR="$CM_BUILD_DIR/signing"
-          mkdir -p "$SIGNING_DIR"
-
-          CERT_KEY_PATH="$SIGNING_DIR/cert_key.pem"
-          openssl genrsa -out "$CERT_KEY_PATH" 2048
-          test -s "$CERT_KEY_PATH"
-
-          set +x
-          CERT_KEY_CONTENT="$(cat "$CERT_KEY_PATH")"
-          set -x
-
-          app-store-connect fetch-signing-files \
+          set -euxo pipefail
+          PROFILES_DIR="$CM_BUILD_DIR/profiles"
+          mkdir -p "$PROFILES_DIR"
+          app-store-connect fetch-profiles \
             "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create \
-            --delete-stale-profiles \
-            --certificate-key "$CERT_KEY_CONTENT" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --p12-password "$P12_PASSWORD" \
-            --output-directory "$SIGNING_DIR"
+            --download-directory "$PROFILES_DIR"
+          echo "Profiler hentet:"
+          ls -la "$PROFILES_DIR" || true
 
-          echo "== Listing fetched files =="
-          ls -la "$SIGNING_DIR" || true
-          # fjern nøglefil efter brug
-          rm -f "$CERT_KEY_PATH"
-
-      - name: "Import certs & apply profiles"
+      - name: "Apply profiles to Xcode project"
         script: |
           set -euxo pipefail
-          SIGNING_DIR="$CM_BUILD_DIR/signing"
-          keychain initialize
-          # Importer præcis den .p12 vi lige hentede
-          keychain add-certificates --certificate "$SIGNING_DIR"/*.p12 --certificate-password "$P12_PASSWORD"
-          # Brug de profiler, der ligger i samme mappe
-          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$SIGNING_DIR"
-
-      - name: "Diagnose signing state"
-        script: |
-          set -euxo pipefail
-          echo "== Keychain identities =="
-          security find-identity -p codesigning -v || true
-          echo "== Build settings (excerpt) =="
+          PROFILES_DIR="$CM_BUILD_DIR/profiles"
+          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$PROFILES_DIR"
+          # Diagnose
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
