@@ -29,7 +29,9 @@ targets:
         SWIFT_VERSION: 5.0
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
         DEVELOPMENT_TEAM: GUYJ52Y55V
-        CODE_SIGN_STYLE: Automatic   # brug Manual når vi anvender use-profiles i Codemagic
+        CODE_SIGN_STYLE: Manual   # Manual så xcode-project use-profiles får effekt
+        # VIGTIGT: Sæt IKKE CODE_SIGN_IDENTITY her.
+        # VIGTIGT: Sæt IKKE PROVISIONING_PROFILE(_SPECIFIER) her – det injicerer Codemagic.
 
     scheme:
       name: SmartKurv
