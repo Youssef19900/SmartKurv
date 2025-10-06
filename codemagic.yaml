@@ -3,52 +3,54 @@ workflows:
     name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
-      groups:
-        - smartkurv
       vars:
+        # Tilpas disse 2:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
-
+        # Apple-id'et (numerisk) for appen i App Store Connect
+        APPLE_APP_ID:  (fx 1234567890)
     scripts:
       - name: Install tools
         script: |
           set -euxo pipefail
           brew install xcodegen
-          pip3 install --upgrade "codemagic-cli-tools>=0.30.0"
-          app-store-connect --version
+          pip3 install --upgrade codemagic-cli-tools
 
       - name: Generate Xcode project
         script: |
           set -euxo pipefail
           xcodegen generate --spec project.yml
 
-      - name: Fetch signing files (cert+profiles) from App Store Connect
+      # === CODE SIGNING (via Apple Developer Portal integration) ===
+      - name: Create temporary private key for certificate CSR
         script: |
           set -euxo pipefail
-
-          # Generér en privat nøgle som certifikatet kan bindes til (krævet for at lave .p12)
+          # Generér en privat nøgle til certifikatet (kun til build-maskinen)
           openssl genrsa -out cert_key.pem 2048
 
-          # Hent/opsæt iOS App Store certifikat + provisioning profile
-          # Bemærk: bundle id'en står til sidst på linjen.
+      - name: Fetch signing files (certificates + profiles)
+        script: |
+          set -euxo pipefail
+          # Ingen --issuer-id/--key-id/--private-key -> integrationen bruges automatisk
+          # --certificate-key skal være en FILSTI (ikke med @)
           app-store-connect fetch-signing-files \
-            --issuer-id "$ASC_ISSUER_ID" \
-            --key-id "$ASC_KEY_ID" \
-            --private-key "$ASC_PRIVATE_KEY" \
+            "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create \
-            --certificate-key @cert_key.pem \
-            --p12-password "$P12_PASSWORD" \
-            com.youssef19900.SmartKurv
-
+            --certificate-key cert_key.pem
+          # Hvis du stadig har gamle profiler, kan du supplere med:
+          # --delete-stale-profiles
 
       - name: Import certs & apply profiles to Xcode project
         script: |
           set -euxo pipefail
           keychain initialize
           keychain add-certificates
-          xcode-project use-profiles --project SmartKurv.xcodeproj --target SmartKurv
+          xcode-project use-profiles \
+            --project SmartKurv.xcodeproj \
+            --target SmartKurv
 
+      # === BUILD & EXPORT ===
       - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
@@ -76,7 +78,6 @@ workflows:
           </dict>
           </plist>
           PLIST
-          cat $CM_BUILD_DIR/exportOptions.plist
 
       - name: Export .ipa
         script: |
@@ -89,14 +90,10 @@ workflows:
       - name: Publish to TestFlight
         script: |
           set -euxo pipefail
+          # Bruger også integrationen automatisk
           app-store-connect publish \
-            --issuer-id "$ASC_ISSUER_ID" \
-            --key-id "$ASC_KEY_ID" \
-            --private-key "$ASC_PRIVATE_KEY" \
-            --path "$CM_BUILD_DIR/exported/SmartKurv.ipa" \
-            --bundle-id "$APP_BUNDLE_ID" \
-            --apple-id "$APPLE_APP_ID"
+            --apple-id "$APPLE_APP_ID" \
+            --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
 
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
-      - $CM_BUILD_DIR/SmartKurv.xcarchive
