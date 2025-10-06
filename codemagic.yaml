@@ -25,17 +25,22 @@ workflows:
       - name: Fetch signing files (cert+profiles) from App Store Connect
         script: |
           set -euxo pipefail
-          test -n "$ASC_ISSUER_ID" && echo "ISSUER_ID OK"
-          test -n "$ASC_KEY_ID" && echo "KEY_ID OK"
-          test -n "$ASC_PRIVATE_KEY" && echo "PRIVATE_KEY length: $(printf %s "$ASC_PRIVATE_KEY" | wc -c)"
-          # ✅ Ny syntaks: bundle id til sidst (INGEN --app-identifier)
+
+          # Generér en privat nøgle som certifikatet kan bindes til (krævet for at lave .p12)
+          openssl genrsa -out cert_key.pem 2048
+
+          # Hent/opsæt iOS App Store certifikat + provisioning profile
+          # Bemærk: bundle id'en står til sidst på linjen.
           app-store-connect fetch-signing-files \
             --issuer-id "$ASC_ISSUER_ID" \
             --key-id "$ASC_KEY_ID" \
             --private-key "$ASC_PRIVATE_KEY" \
             --type IOS_APP_STORE \
             --create \
-            "$APP_BUNDLE_ID"
+            --certificate-key @cert_key.pem \
+            --p12-password "$P12_PASSWORD" \
+            com.youssef19900.SmartKurv
+
 
       - name: Import certs & apply profiles to Xcode project
         script: |
