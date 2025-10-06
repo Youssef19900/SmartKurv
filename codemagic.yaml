@@ -3,13 +3,11 @@ workflows:
     name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
+      groups:
+        - smartkurv            # Henter dine env-vars fra denne gruppe
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
-        ASC_ISSUER_ID: ${ASC_ISSUER_ID}
-        ASC_KEY_ID: ${ASC_KEY_ID}
-        ASC_PRIVATE_KEY: ${ASC_PRIVATE_KEY}
-        APPLE_APP_ID: ${APPLE_APP_ID}
 
     scripts:
       - name: Install tools
@@ -26,6 +24,10 @@ workflows:
       - name: Fetch signing files (cert+profiles) from App Store Connect
         script: |
           set -euxo pipefail
+          # Hurtig sanity-check at variabler er indlæst:
+          test -n "$ASC_ISSUER_ID" && echo "ISSUER_ID OK"
+          test -n "$ASC_KEY_ID" && echo "KEY_ID OK"
+          test -n "$ASC_PRIVATE_KEY" && echo "PRIVATE_KEY length: $(printf %s "$ASC_PRIVATE_KEY" | wc -c)"
           app-store-connect fetch-signing-files \
             --issuer-id "$ASC_ISSUER_ID" \
             --key-id "$ASC_KEY_ID" \
@@ -70,6 +72,7 @@ workflows:
           </dict>
           </plist>
           PLIST
+          cat $CM_BUILD_DIR/exportOptions.plist
 
       - name: Export .ipa
         script: |
@@ -92,3 +95,4 @@ workflows:
 
     artifacts:
       - $CM_BUILD_DIR/exported/*.ipa
+      - $CM_BUILD_DIR/SmartKurv.xcarchive
