@@ -28,20 +28,12 @@ workflows:
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
           cp "$PBX" "$PBX.bak" || true
-
-          # Erstat navngivne Apple Distribution-CNs med generisk
           /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX"
-
-          # Nulstil profiler (use-profiles sætter dem)
           /usr/bin/sed -i '' \
             -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' \
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
             "$PBX"
-
-          # Sikr Manual
           /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX"
-
-          # Vis relevante linjer
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
 
       - name: "Guard - no old cert CNs remain"
@@ -53,16 +45,16 @@ workflows:
             exit 1
           fi
 
-      - name: "Generate CSR key & fetch signing files"
+      - name: "Generate CSR key & fetch signing files (to known folder)"
         script: |
           set -euo pipefail
+          SIGNING_DIR="$CM_BUILD_DIR/signing"
+          mkdir -p "$SIGNING_DIR"
 
-          CERT_KEY_PATH="$CM_BUILD_DIR/cert_key.pem"
-          # Generér midlertidig key til CSR
+          CERT_KEY_PATH="$SIGNING_DIR/cert_key.pem"
           openssl genrsa -out "$CERT_KEY_PATH" 2048
           test -s "$CERT_KEY_PATH"
 
-          # Undgå at nøgleindhold ender i log
           set +x
           CERT_KEY_CONTENT="$(cat "$CERT_KEY_PATH")"
           set -x
@@ -76,17 +68,23 @@ workflows:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --p12-password "$P12_PASSWORD"
+            --p12-password "$P12_PASSWORD" \
+            --output-directory "$SIGNING_DIR"
 
-          # Ryd op
+          echo "== Listing fetched files =="
+          ls -la "$SIGNING_DIR" || true
+          # fjern nøglefil efter brug
           rm -f "$CERT_KEY_PATH"
 
       - name: "Import certs & apply profiles"
         script: |
           set -euxo pipefail
+          SIGNING_DIR="$CM_BUILD_DIR/signing"
           keychain initialize
-          keychain add-certificates --certificate-password "$P12_PASSWORD"
-          xcode-project use-profiles --project SmartKurv.xcodeproj
+          # Importer præcis den .p12 vi lige hentede
+          keychain add-certificates --certificate "$SIGNING_DIR"/*.p12 --certificate-password "$P12_PASSWORD"
+          # Brug de profiler, der ligger i samme mappe
+          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$SIGNING_DIR"
 
       - name: "Diagnose signing state"
         script: |
