@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv    # Skal indeholde: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD (m.fl.)
+        - smartkurv   # Skal indeholde: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY, P12_PASSWORD
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -23,18 +23,35 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: Reset signing keys inside .xcodeproj
+      - name: Reset signing keys inside .xcodeproj (aggressiv)
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
           cp "$PBX" "$PBX.bak" || true
+
+          # Erstat navngivne Apple Distribution-CNs med generisk
+          /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX"
+
+          # Nulstil profiler (use-profiles sætter dem)
           /usr/bin/sed -i '' \
-            -e 's/CODE_SIGN_IDENTITY = "Apple Distribution: [^"]*";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' \
-            -e 's/CODE_SIGN_IDENTITY\[sdk=iphoneos\*\] = "Apple Distribution: [^"]*";/CODE_SIGN_IDENTITY\[sdk=iphoneos\*\] = "Apple Distribution";/g' \
             -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' \
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
-            "$PBX" || true
+            "$PBX"
+
+          # Sikr Manual
+          /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX"
+
+          # Vis relevante linjer
           grep -E 'CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' "$PBX" || true
+
+      - name: Guard: ingen gamle cert-navne tilbage
+        script: |
+          set -euxo pipefail
+          if grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj | grep -v 'CODE_SIGN_IDENTITY = "Apple Distribution";' ; then
+            echo "Fandt stadig en navngiven Apple Distribution-CN i projektfilen. Stopper."
+            grep -n 'Apple Distribution:' SmartKurv.xcodeproj/project.pbxproj || true
+            exit 1
+          fi
 
       - name: Generate CSR key & fetch signing files
         script: |
@@ -45,7 +62,7 @@ workflows:
           openssl genrsa -out "$CERT_KEY_PATH" 2048
           test -s "$CERT_KEY_PATH"
 
-          # Undgå at nøgleindhold ender i log (slå xtrace fra, slå til igen bagefter)
+          # Undgå at nøgleindhold ender i log
           set +x
           CERT_KEY_CONTENT="$(cat "$CERT_KEY_PATH")"
           set -x
@@ -90,6 +107,8 @@ workflows:
             -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -sdk iphoneos \
             -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
       - name: Write exportOptions.plist (App Store)
