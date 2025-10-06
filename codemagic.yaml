@@ -27,33 +27,36 @@ workflows:
         script: |
           set -euxo pipefail
           keychain initialize
-          # Genskab p12 fra base64 (ingen output i log)
+          # Genskab p12 fra base64 og importér
           P12_PATH="$CM_BUILD_DIR/AppleDistribution.p12"
           echo "$P12_BASE64" | base64 --decode > "$P12_PATH"
-          # Verificér at filen findes
           test -s "$P12_PATH"
-          # Importér i keychain
           keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
 
-      - name: "Fetch provisioning profiles (no new certs)"
+      - name: "Fetch provisioning profiles (existing only)"
         script: |
           set -euxo pipefail
           PROFILES_DIR="$CM_BUILD_DIR/profiles"
           mkdir -p "$PROFILES_DIR"
-          app-store-connect fetch-profiles \
+
+          # Hent EKSISTERENDE profiler/cert-filer for bundle id'et. Ingen --create, så ingen nye certs.
+          app-store-connect fetch-signing-files \
             "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --download-directory "$PROFILES_DIR"
+            --output-directory "$PROFILES_DIR"
+
+          echo "Indhold i $PROFILES_DIR:"
           ls -la "$PROFILES_DIR" || true
 
       - name: "Apply profiles to Xcode project"
         script: |
           set -euxo pipefail
           PROFILES_DIR="$CM_BUILD_DIR/profiles"
-          # Sørg for Manual + ingen hardcodede CNs/profiler
+
+          # Sørg for Manual + ingen hårdkodede CNs/profiler i projektfilen
           PBX="SmartKurv.xcodeproj/project.pbxproj"
           /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
@@ -63,7 +66,8 @@ workflows:
             "$PBX" || true
 
           xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$PROFILES_DIR"
-          # Diagnose
+
+          echo "== Build settings (uddrag) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
