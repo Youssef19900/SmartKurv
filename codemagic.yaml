@@ -21,7 +21,7 @@ workflows:
         script: |
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
-          xcodegen generate --spec project.yml --use-cache no
+          xcodegen generate --spec project.yml 
 
       - name: Reset signing keys inside .xcodeproj
         script: |
