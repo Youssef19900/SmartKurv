@@ -10,27 +10,18 @@ private struct PriceObservation: Codable {
     let timestamp: Date
 }
 
-// En simpel butiksmodel (matcher det vi lagde i Models.swift)
-struct Store: Identifiable, Codable, Hashable {
-    let id: String      // Salling storeId
-    let name: String
-    let lat: Double
-    let lon: Double
-}
-
 final class PricingService {
     static let shared = PricingService()
     private init() {}
 
     // MARK: – Konfig
     var apiTokenProvider: () -> String = { "" } // <-- Sæt via AppState/Keychain
-    private let base = URL(string: "https://api.sallinggroup.com/v2/products")!
     private let session = URLSession(configuration: .default)
 
     // in-memory cache (nulstilles ved app-genstart)
     private var cache: [String: PriceObservation] = [:] // key = "\(ean)|\(storeId)"
 
-    // fallback “prisniveau” pr. kæde (din tidligere idé)
+    // fallback “prisniveau” pr. kæde
     private func chainFactor(name: String) -> Double {
         switch name.lowercased() {
         case "netto": return 0.96
@@ -43,7 +34,7 @@ final class PricingService {
 
     /// Hovedfunktion: returnerer de 2 billigste butikker for en liste.
     func findCheapest(list: ShoppingList, location: CLLocation?) async -> [StoreTotal] {
-        // TODO: erstat med rigtige butikker fra Stores API + geo-filter på 'location'
+        // TODO: Erstat med rigtige butikker fra Stores API + geo-filter på 'location'
         let stores: [Store] = [
             .init(id: "1234", name: "Netto", lat: 0, lon: 0),
             .init(id: "5678", name: "Føtex", lat: 0, lon: 0)
@@ -57,7 +48,6 @@ final class PricingService {
                 let unit = await unitPrice(for: item, in: store)
                 sum += unit * Double(item.qty)
             }
-            // afrund pænt
             let rounded = (sum * 100).rounded() / 100
             totals.append(StoreTotal(storeName: store.name, total: rounded))
         }
@@ -65,29 +55,33 @@ final class PricingService {
         return totals.sorted { $0.total < $1.total }.prefix(2).map { $0 }
     }
 
-    // MARK: – Enkeltvare: AI-assisteret stykpris
+    // MARK: – Enkeltvare: pris (API hvis muligt, ellers heuristik)
 
     private func unitPrice(for item: ShoppingItem, in store: Store) async -> Double {
-        // 1) slå EAN op fra variant (hvis du ikke har ean endnu, kan du mappe via en tabel)
-        guard let ean = item.variant.ean else {
-            // ingen EAN? brug AI-estimat baseline * kædefaktor
+        // 1) EAN fra CatalogService (ean-map.json eller varianten selv)
+        let ean = CatalogService.shared.ean(for: item.product, variant: item.variant)
+
+        // 2) Hvis ingen EAN → AI-estimat * kædefaktor
+        guard let ean else {
             let est = heuristicEstimate(product: item.product, variant: item.variant)
             return est * chainFactor(name: store.name)
         }
 
-        // 2) cache
+        // 3) Cache
         let key = "\(ean)|\(store.id)"
         if let hit = cache[key], Date().timeIntervalSince(hit.timestamp) < 60 * 30 {
-            return (hit.unitPrice + hit.deposit) // cache i 30 min
+            return hit.unitPrice + hit.deposit // cache i 30 min
         }
 
-        // 3) forsøg API
+        // 4) Forsøg API
         if let apiPrice = await fetchFromAPI(ean: ean, storeId: store.id) {
             cache[key] = apiPrice
+            // lær af den observerede pris
+            updatePrior(product: item.product, variant: item.variant, observed: apiPrice.unitPrice + apiPrice.deposit)
             return apiPrice.unitPrice + apiPrice.deposit
         }
 
-        // 4) fallback: AI-estimat justeret med kædefaktor
+        // 5) Fallback: AI-estimat * kædefaktor
         let est = heuristicEstimate(product: item.product, variant: item.variant)
         return est * chainFactor(name: store.name)
     }
@@ -95,8 +89,10 @@ final class PricingService {
     // MARK: – Salling API
 
     private func fetchFromAPI(ean: String, storeId: String) async -> PriceObservation? {
-        var url = base.appendingPathComponent(ean)
-        url.append(queryItems: [URLQueryItem(name: "storeId", value: storeId)])
+        guard let url = buildURL(
+            base: "https://api.sallinggroup.com/v2/products/\(ean)",
+            query: ["storeId": storeId]
+        ) else { return nil }
 
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -104,13 +100,12 @@ final class PricingService {
 
         do {
             let (data, resp) = try await session.data(for: req)
-            guard let http = resp as? HTTPURLResponse else { return nil }
-            guard http.statusCode == 200 else {
-                // 401/403/log – men fald tilbage til heuristik
+            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                // 401/403/404 → fald tilbage til heuristik
                 return nil
             }
 
-            // vi parser kun de felter vi bruger
+            // kun de felter vi bruger
             struct Resp: Codable {
                 struct Instore: Codable {
                     struct Campaign: Codable { let price: Double?; let quantity: Int? }
@@ -124,19 +119,25 @@ final class PricingService {
             }
 
             let dec = try JSONDecoder().decode(Resp.self, from: data)
-            let base = dec.instore?.price ?? dec.instore?.unitPrice
 
+            let base = dec.instore?.price ?? dec.instore?.unitPrice
             let cPrice = dec.instore?.campaign?.price
             let cQty   = dec.instore?.campaign?.quantity
             let campaignUnit = (cPrice != nil && (cQty ?? 0) > 0) ? (cPrice! / Double(cQty!)) : nil
 
-            // vælg billigste af kampagne vs normal
+            // vælg billigste af kampagne vs. normal
             let unit = minOptional(campaignUnit, base) ?? base
-
             let deposit = dec.instore?.deposit?.price ?? 0.0
+
             guard let u = unit else { return nil }
 
-            return PriceObservation(ean: ean, storeId: storeId, unitPrice: u, deposit: deposit, timestamp: Date())
+            return PriceObservation(
+                ean: ean,
+                storeId: storeId,
+                unitPrice: u,
+                deposit: deposit,
+                timestamp: Date()
+            )
         } catch {
             return nil
         }
@@ -151,14 +152,11 @@ final class PricingService {
         }
     }
 
-    // MARK: – “AI”: heuristik + historik
-    // Enkel, men effektiv: enhedsnormering + priors + EMA-læring når vi får rigtige priser.
+    // MARK: – “AI”: heuristik + historik (EMA)
 
-    // historik pr. (produktId|unit|organic)
-    private var priors: [String: (mean: Double, alpha: Double)] = [:]
+    private var priors: [String: (mean: Double, alpha: Double)] = [:] // (produktId|unit|organic)
 
     private func heuristicEstimate(product: Product, variant: ProductVariant) -> Double {
-        // 1) basispris pr. kategori (kan fintudbygges)
         let base: Double = {
             switch product.id {
             case _ where product.name.localizedCaseInsensitiveContains("banan"):
@@ -172,27 +170,23 @@ final class PricingService {
             }
         }()
 
-        // 2) øko-tillæg
         let organicCoef = variant.organic ? 1.15 : 1.0
 
-        // 3) enhedsnormalisering (pr. liter/kg hvis muligt)
         let unitCoef: Double = {
             switch variant.unit.lowercased() {
-            case "kg":  return 1.0
+            case "kg": return 1.0
             case "ltr", "l": return 1.0
             case "stk": return 1.0
             case "bundt": return 4.5
-            case "6-pak": return 6.0   // ca. stk-pris * 6
+            case "6-pak": return 6.0
             case "24-pak": return 24.0
             default: return 1.0
             }
         }()
 
         var estimate = base * organicCoef
-        // hvis multipak, gang op
-        if unitCoef > 1.1 { estimate = (base * organicCoef) * unitCoef }
+        if unitCoef > 1.1 { estimate *= unitCoef }
 
-        // 4) læring fra historik (EMA: alpha ~ 0.3)
         let key = "\(product.id)|\(variant.unit)|\(variant.organic ? "1":"0")"
         if let prior = priors[key] {
             estimate = 0.7 * prior.mean + 0.3 * estimate
@@ -201,7 +195,6 @@ final class PricingService {
         return (estimate * 100).rounded() / 100
     }
 
-    // kaldes når vi får en rigtig pris → opdatér prior
     private func updatePrior(product: Product, variant: ProductVariant, observed: Double) {
         let key = "\(product.id)|\(variant.unit)|\(variant.organic ? "1":"0")"
         let old = priors[key]?.mean ?? observed
@@ -209,4 +202,14 @@ final class PricingService {
         let newMean = (1 - alpha) * old + alpha * observed
         priors[key] = (newMean, alpha)
     }
+}
+
+// MARK: - URL helper
+
+private func buildURL(base: String, query: [String: String]) -> URL? {
+    guard var comp = URLComponents(string: base) else { return nil }
+    var items: [URLQueryItem] = comp.queryItems ?? []
+    for (k, v) in query { items.append(URLQueryItem(name: k, value: v)) }
+    comp.queryItems = items
+    return comp.url
 }
