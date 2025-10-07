@@ -83,10 +83,12 @@ struct SearchPage: View {
                                         updateSuggestions(for: newValue)
                                     }
 
-                                Button("Søg") { app.performSearch()
+                                Button("Søg") {
+                                    app.performSearch()
                                     withAnimation { showSuggestions = false }
                                 }
                                 .buttonStyle(PrimaryButton())
+                                .controlSize(.regular) // ← vigtig
                                 .frame(width: 110)
                             }
 
@@ -146,7 +148,7 @@ struct SearchPage: View {
                     .padding(.bottom, 32)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline) // ← vigtig
         }
     }
 
@@ -212,6 +214,7 @@ struct ProductRow: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .controlSize(.regular) // ← vigtig
 
                     Toggle(isOn: Binding(
                         get: { app.isOrganic[product.id] ?? (app.defaultVariant(for: product).organic) },
@@ -220,6 +223,7 @@ struct ProductRow: View {
                         Text("Øko").foregroundColor(Theme.text1)
                     }
                     .toggleStyle(SwitchToggleStyle(tint: Theme.accent))
+                    .controlSize(.regular) // ← vigtig
                     .frame(maxWidth: 90)
                 }
 
@@ -230,6 +234,7 @@ struct ProductRow: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButton())
+                .controlSize(.regular) // ← vigtig
             }
         }
     }
@@ -307,6 +312,7 @@ struct ListPage: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(PrimaryButton())
+                        .controlSize(.regular) // ← vigtig
                         .disabled(isFinding)
 
                         // Resultat
@@ -355,6 +361,7 @@ struct ListPage: View {
                                             .frame(maxWidth: .infinity)
                                     }
                                     .buttonStyle(.bordered)
+                                    .controlSize(.regular) // ← ens størrelse
                                     .tint(Theme.text1)
                                     .padding(.top, 4)
                                 }
@@ -366,6 +373,7 @@ struct ListPage: View {
                 .padding(.vertical, 16)
             }
             .navigationTitle("Indkøbsliste")
+            .navigationBarTitleDisplayMode(.inline) // ← vigtig
             .alert("Lokation kræves", isPresented: $showLocationAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -454,6 +462,7 @@ struct HistoryPage: View {
                 }
             }
             .navigationTitle("Historik")
+            .navigationBarTitleDisplayMode(.inline) // ← vigtig
         }
     }
 }
