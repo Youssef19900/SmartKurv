@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal have: P12_BASE64, P12_PASSWORD, PROFILE_BASE64
+        - smartkurv   # P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_* (til upload)
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -33,15 +33,16 @@ workflows:
           keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
           security find-identity -p codesigning -v || true
 
-      - name: Restore provisioning profile (from base64)
+      - name: Restore provisioning profile (from base64 → standardmappe)
         script: |
           set -euxo pipefail
-          PROFILES_DIR="$CM_BUILD_DIR/profiles"
-          mkdir -p "$PROFILES_DIR"
-          PROFILE_PATH="$PROFILES_DIR/SmartKurv_AppStore.mobileprovision"
-          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
-          test -s "$PROFILE_PATH"
-          ls -la "$PROFILES_DIR"
+          STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$STD_DIR"
+          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
+          test -s "$PROFILE_STD"
+          echo "Profiler i standardmappe:"
+          ls -la "$STD_DIR" || true
 
       - name: Apply profile to Xcode project
         script: |
@@ -54,7 +55,8 @@ workflows:
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
             "$PBX" || true
 
-          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$CM_BUILD_DIR/profiles"
+          # Brug profiler fra standardplacering (ingen --profiles flag)
+          xcode-project use-profiles --project SmartKurv.xcodeproj
 
           echo "== Build settings (uddrag) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
