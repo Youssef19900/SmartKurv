@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_* (til upload)
+        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -23,44 +23,36 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: Import .p12 (from base64)
+      - name: Import .p12 certificate
         script: |
           set -euxo pipefail
           keychain initialize
-          P12_PATH="$CM_BUILD_DIR/AppleDistribution.p12"
-          echo "$P12_BASE64" | base64 --decode > "$P12_PATH"
-          test -s "$P12_PATH"
-          keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
+          echo "$P12_BASE64" | base64 --decode > "$CM_BUILD_DIR/AppleDistribution.p12"
+          keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
           security find-identity -p codesigning -v || true
 
-      - name: Restore provisioning profile (from base64 → standardmappe)
+      - name: Restore provisioning profile
         script: |
           set -euxo pipefail
           STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$STD_DIR"
-          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
-          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
-          test -s "$PROFILE_STD"
-          echo "Profiler i standardmappe:"
-          ls -la "$STD_DIR" || true
+          echo "$PROFILE_BASE64" | base64 --decode > "$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          ls -la "$STD_DIR"
 
-      - name: Apply profile to Xcode project
+      - name: Configure signing in Xcode project
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
-          /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
-          /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
-          /usr/bin/sed -i '' \
-            -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' \
-            -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
-            "$PBX" || true
+          sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
+          sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
 
-          # Brug profiler fra standardplacering (ingen --profiles flag)
           xcode-project use-profiles --project SmartKurv.xcodeproj
 
-          echo "== Build settings (uddrag) =="
+          echo "== Build settings =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
+            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER'
 
       - name: Build archive (codesigned)
         script: |
@@ -76,7 +68,7 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      - name: Write exportOptions.plist (App Store)
+      - name: Write exportOptions.plist
         script: |
           set -euxo pipefail
           cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
@@ -100,7 +92,7 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      - name: Publish to TestFlight
+      - name: Upload to TestFlight
         script: |
           set -euxo pipefail
           app-store-connect publish \
