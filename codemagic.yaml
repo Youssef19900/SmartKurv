@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # Skal have: P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -27,37 +27,32 @@ workflows:
         script: |
           set -euxo pipefail
           keychain initialize
-          # Genskab p12 fra base64 og importér
           P12_PATH="$CM_BUILD_DIR/AppleDistribution.p12"
+          # genskab p12 fra env
           echo "$P12_BASE64" | base64 --decode > "$P12_PATH"
           test -s "$P12_PATH"
           keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
+          # vis identiteter til debug
+          security find-identity -p codesigning -v || true
 
       - name: "Fetch provisioning profiles (existing only)"
         script: |
           set -euxo pipefail
-          PROFILES_DIR="$CM_BUILD_DIR/profiles"
-          mkdir -p "$PROFILES_DIR"
-
-          # Hent EKSISTERENDE profiler/cert-filer for bundle id'et. Ingen --create, så ingen nye certs.
+          echo "Henter EKSISTERENDE profiler fra App Store Connect (ingen --create)..."
           app-store-connect fetch-signing-files \
             "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --output-directory "$PROFILES_DIR"
-
-          echo "Indhold i $PROFILES_DIR:"
-          ls -la "$PROFILES_DIR" || true
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+          echo "Profiler i standardmappe:"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" || true
 
       - name: "Apply profiles to Xcode project"
         script: |
           set -euxo pipefail
-          PROFILES_DIR="$CM_BUILD_DIR/profiles"
-
-          # Sørg for Manual + ingen hårdkodede CNs/profiler i projektfilen
           PBX="SmartKurv.xcodeproj/project.pbxproj"
+          # sikr manual + ingen hardcodede CNs/profiler
           /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           /usr/bin/sed -i '' \
@@ -65,7 +60,8 @@ workflows:
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
             "$PBX" || true
 
-          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$PROFILES_DIR"
+          # brug profiler fra standardplacering
+          xcode-project use-profiles --project SmartKurv.xcodeproj
 
           echo "== Build settings (uddrag) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
