@@ -2,12 +2,11 @@ import SwiftUI
 
 @main
 struct SmartKurvApp: App {
-    @StateObject private var app = AppState()
-
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(app)
+            RootTabView()            // <— dit eksisterende tab-view
+                .tint(Theme.accent)  // global knap/link-farve
+                .background(Theme.bg.ignoresSafeArea())
         }
     }
 }
