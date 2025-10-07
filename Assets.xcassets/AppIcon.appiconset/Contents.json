@@ -1,13 +1,13 @@
 {
   "images": [
     {
-      "size": "120x120",
+      "size": "60x60",
       "idiom": "iphone",
       "filename": "AppIcon-60@2x.png",
       "scale": "2x"
     },
     {
-      "size": "180x180",
+      "size": "60x60",
       "idiom": "iphone",
       "filename": "AppIcon-60@3x.png",
       "scale": "3x"
