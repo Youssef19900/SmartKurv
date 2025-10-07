@@ -4,26 +4,26 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # indeholder: P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # Skal have: P12_BASE64, P12_PASSWORD, PROFILE_BASE64
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
 
     scripts:
-      - name: "Install tools"
+      - name: Install tools
         script: |
           set -euxo pipefail
           brew install xcodegen
           pip3 install --upgrade codemagic-cli-tools
 
-      - name: "Regenerate project (fresh)"
+      - name: Regenerate project (fresh)
         script: |
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: "Import existing .p12 (from base64 env)"
+      - name: Import .p12 (from base64)
         script: |
           set -euxo pipefail
           keychain initialize
@@ -33,21 +33,17 @@ workflows:
           keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
           security find-identity -p codesigning -v || true
 
-      - name: "Fetch provisioning profiles (existing only)"
+      - name: Restore provisioning profile (from base64)
         script: |
           set -euxo pipefail
-          echo "Henter EKSISTERENDE profiler fra App Store Connect…"
-          app-store-connect fetch-signing-files \
-            "$APP_BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --p12-password "$P12_PASSWORD"
-          echo "Profiler i standardmappe:"
-          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" || true
+          PROFILES_DIR="$CM_BUILD_DIR/profiles"
+          mkdir -p "$PROFILES_DIR"
+          PROFILE_PATH="$PROFILES_DIR/SmartKurv_AppStore.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+          test -s "$PROFILE_PATH"
+          ls -la "$PROFILES_DIR"
 
-      - name: "Apply profiles to Xcode project"
+      - name: Apply profile to Xcode project
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
@@ -58,11 +54,13 @@ workflows:
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
             "$PBX" || true
 
-          xcode-project use-profiles --project SmartKurv.xcodeproj
+          xcode-project use-profiles --project SmartKurv.xcodeproj --profiles "$CM_BUILD_DIR/profiles"
+
+          echo "== Build settings (uddrag) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
-      - name: "Build archive (codesigned)"
+      - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
           xcodebuild \
@@ -76,7 +74,7 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      - name: "Write exportOptions.plist (App Store)"
+      - name: Write exportOptions.plist (App Store)
         script: |
           set -euxo pipefail
           cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
@@ -92,7 +90,7 @@ workflows:
           </plist>
           PLIST
 
-      - name: "Export .ipa"
+      - name: Export .ipa
         script: |
           set -euxo pipefail
           xcodebuild -exportArchive \
@@ -100,7 +98,7 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      - name: "Publish to TestFlight"
+      - name: Publish to TestFlight
         script: |
           set -euxo pipefail
           app-store-connect publish \
