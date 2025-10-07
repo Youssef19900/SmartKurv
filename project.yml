@@ -20,6 +20,7 @@ targets:
     resources:
       - Assets.xcassets
       - catalog.json
+      - LaunchScreen.storyboard   # ← tilføjet launch screen
 
     info:
       path: Info.plist
@@ -29,11 +30,23 @@ targets:
         SWIFT_VERSION: 5.0
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
         DEVELOPMENT_TEAM: GUYJ52Y55V
+
+        # Codesigning styres manuelt (Codemagic "use-profiles" sætter profilerne)
         CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Apple Distribution"             # <- generisk, ikke personnavn
+        CODE_SIGN_IDENTITY: "Apple Distribution"
         CODE_SIGN_IDENTITY[sdk=iphoneos*]: "Apple Distribution"
-        PROVISIONING_PROFILE_SPECIFIER: ""                   # <- tom; sættes af use-profiles
-        PROVISIONING_PROFILE: ""                             # <- tom; sættes af use-profiles
+        PROVISIONING_PROFILE_SPECIFIER: ""   # tom; sættes af use-profiles
+        PROVISIONING_PROFILE: ""             # tom; sættes af use-profiles
+
+        # App icon set navn (skal matche Assets.xcassets/AppIcon.appiconset)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+        # iPhone-only (undgår iPad multitasking/launchscreen-krav)
+        TARGETED_DEVICE_FAMILY: "1"
+
+        # (valgfrit) versionsfelter – kan også styres i Info.plist
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
 
     scheme:
       name: SmartKurv
