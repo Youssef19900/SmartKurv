@@ -33,20 +33,20 @@ final class AppState: ObservableObject {
 
     // Default-variant hvis brugeren ikke har valgt
     func defaultVariant(for product: Product) -> ProductVariant {
-        product.variants.first ?? ProductVariant(unit: "stk", organic: false)
+        product.variants.first ?? ProductVariant(unit: "stk", organic: false, ean: nil)
     }
 
     // Brugeren ændrer enhed
     func setUnit(for product: Product, unit: String) {
         let baseOrganic = isOrganic[product.id] ?? defaultVariant(for: product).organic
-        let v = ProductVariant(unit: unit, organic: baseOrganic)
+        let v = ProductVariant(unit: unit, organic: baseOrganic, ean: nil)
         selectedVariant[product.id] = v
     }
 
     // Brugeren toggler øko
     func toggleOrganic(for product: Product, value: Bool) {
         let baseUnit = (selectedVariant[product.id]?.unit) ?? defaultVariant(for: product).unit
-        let v = ProductVariant(unit: baseUnit, organic: value)
+        let v = ProductVariant(unit: baseUnit, organic: value, ean: nil)
         selectedVariant[product.id] = v
         isOrganic[product.id] = value
     }
