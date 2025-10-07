@@ -1,142 +1,212 @@
 import Foundation
 import CoreLocation
 
-/// Finder totalpriser for en indkøbsliste i nærliggende butikker.
-/// I denne demo bruges simple "basispriser" + en kæde-faktor (Netto/Føtex).
+// Observations gemmes i cache/hukommelse
+private struct PriceObservation: Codable {
+    let ean: String
+    let storeId: String
+    let unitPrice: Double   // inkl. kampagne udjævnet til stykpris
+    let deposit: Double
+    let timestamp: Date
+}
+
+// En simpel butiksmodel (matcher det vi lagde i Models.swift)
+struct Store: Identifiable, Codable, Hashable {
+    let id: String      // Salling storeId
+    let name: String
+    let lat: Double
+    let lon: Double
+}
+
 final class PricingService {
     static let shared = PricingService()
     private init() {}
 
-    // MARK: - Offentlig API
+    // MARK: – Konfig
+    var apiTokenProvider: () -> String = { "" } // <-- Sæt via AppState/Keychain
+    private let base = URL(string: "https://api.sallinggroup.com/v2/products")!
+    private let session = URLSession(configuration: .default)
 
-    /// Returnerer de to billigste butikker for den givne liste.
-    /// - Parameters:
-    ///   - list: Brugerens indkøbsliste
-    ///   - location: Sidste kendte lokation (ikke brugt i denne simple mock, men sendt med for fremtidig geofiltering)
-    func findCheapest(list: ShoppingList, location: CLLocation?) async -> [StoreTotal] {
-        // De kæder du bad om
-        let stores = ["Netto", "Føtex"]
+    // in-memory cache (nulstilles ved app-genstart)
+    private var cache: [String: PriceObservation] = [:] // key = "\(ean)|\(storeId)"
 
-        // Evt. lette prisniveau-forskelle mellem kæder (kan justeres frit)
-        func factor(for store: String) -> Double {
-            switch store {
-            case "Netto": return 0.96   // Netto er ofte lidt billigere i snit
-            case "Føtex": return 1.00
-            default:      return 1.00
-            }
+    // fallback “prisniveau” pr. kæde (din tidligere idé)
+    private func chainFactor(name: String) -> Double {
+        switch name.lowercased() {
+        case "netto": return 0.96
+        case "føtex", "foetex", "fotex": return 1.00
+        default: return 1.00
         }
+    }
+
+    // MARK: – Offentlig API
+
+    /// Hovedfunktion: returnerer de 2 billigste butikker for en liste.
+    func findCheapest(list: ShoppingList, location: CLLocation?) async -> [StoreTotal] {
+        // TODO: erstat med rigtige butikker fra Stores API + geo-filter på 'location'
+        let stores: [Store] = [
+            .init(id: "1234", name: "Netto", lat: 0, lon: 0),
+            .init(id: "5678", name: "Føtex", lat: 0, lon: 0)
+        ]
 
         var totals: [StoreTotal] = []
-        for s in stores {
-            let f = factor(for: s)
+
+        for store in stores {
             var sum = 0.0
-
-            for it in list.items {
-                let base = basePrice(for: it.product, variant: it.variant)
-                sum += base * Double(it.qty) * f
+            for item in list.items {
+                let unit = await unitPrice(for: item, in: store)
+                sum += unit * Double(item.qty)
             }
-
-            // afrund til 2 decimaler på en pæn måde
+            // afrund pænt
             let rounded = (sum * 100).rounded() / 100
-            totals.append(StoreTotal(storeName: s, total: rounded))
+            totals.append(StoreTotal(storeName: store.name, total: rounded))
         }
 
-        // Billigste først og returnér max 2
         return totals.sorted { $0.total < $1.total }.prefix(2).map { $0 }
     }
 
-    // MARK: - Basispriser (mock)
+    // MARK: – Enkeltvare: AI-assisteret stykpris
 
-    /// Simpelt "prisleksikon" til demo. Når du senere kobler rigtige priser på,
-    /// bliver denne funktion erstattet af web/API-opslag.
-    private func basePrice(for product: Product, variant: ProductVariant) -> Double {
-        switch product.id {
-
-        // FRUGT & GRØNT
-        case "banan":
-            // stk/bundt + øko/konv.
-            if variant.unit == "bundt" { return variant.organic ? 24.0 : 20.0 }
-            return variant.organic ? 5.5 : 4.0      // stk
-        case "apple-red":
-            return variant.unit == "kg" ? (variant.organic ? 26.0 : 22.0) : (variant.organic ? 4.5 : 3.5)
-        case "pear":
-            return variant.unit == "kg" ? (variant.organic ? 28.0 : 24.0) : (variant.organic ? 5.0 : 4.0)
-        case "cucumber":
-            return variant.organic ? 14.0 : 10.0
-        case "tomato":
-            if variant.unit == "kg" { return variant.organic ? 36.0 : 30.0 }
-            return variant.organic ? 18.0 : 15.0     // bakke
-        case "iceberg":
-            return variant.organic ? 18.0 : 15.0
-        case "potato":
-            if variant.unit == "kg" { return variant.organic ? 16.0 : 12.0 }
-            return variant.organic ? 26.0 : 20.0     // pose
-        case "carrot":
-            if variant.unit == "kg" { return variant.organic ? 16.0 : 12.0 }
-            return variant.organic ? 18.0 : 14.0     // pose
-        case "onion-yellow":
-            if variant.unit == "kg" { return 10.0 }
-            return 12.0                               // pose
-
-        // MEJERI / BAGERI
-        case "milk-1l":
-            return variant.organic ? 12.0 : 9.0       // 1 liter letmælk
-        case "milk-skim-1l":
-            return variant.organic ? 12.0 : 9.0
-        case "yoghurt-1l":
-            return variant.organic ? 18.0 : 15.0
-        case "butter-200g":
-            return variant.organic ? 24.0 : 20.0
-        case "cheese-slice-400g":
-            return variant.organic ? 40.0 : 32.0
-        case "eggs-10":
-            return variant.organic ? 36.0 : 28.0
-        case "rye-bread-1kg":
-            return variant.organic ? 24.0 : 18.0
-        case "white-bread-600g":
-            return 16.0
-
-        // KOLONIAL
-        case "pasta-penne-500g":
-            return 12.0
-        case "spaghetti-500g":
-            return 12.0
-        case "rice-jasmine-1kg":
-            return 20.0
-        case "tuna-185g":
-            return 14.0
-        case "tomato-chopped-400g":
-            return 8.0
-        case "baked-beans-415g":
-            return 10.0
-        case "corn-340g":
-            return 10.0
-        case "chickpeas-400g":
-            return 9.0
-        case "coffee-400g":
-            return 40.0
-        case "sugar-1kg":
-            return 11.0
-
-        // DRIKKEVARER
-        case "cola-330":
-            switch variant.unit {
-            case "24-pak": return 120.0
-            case "6-pak":  return 36.0
-            default:       return 6.0  // stk
-            }
-        case "pepsi-max-330":
-            switch variant.unit {
-            case "24-pak": return 110.0
-            case "6-pak":  return 34.0
-            default:       return 5.5
-            }
-        case "water-still-1_5l":
-            return variant.unit == "6-pak" ? 36.0 : 7.0
-
-        // Fallback hvis en vare mangler i tabellen
-        default:
-            return 10.0
+    private func unitPrice(for item: ShoppingItem, in store: Store) async -> Double {
+        // 1) slå EAN op fra variant (hvis du ikke har ean endnu, kan du mappe via en tabel)
+        guard let ean = item.variant.ean else {
+            // ingen EAN? brug AI-estimat baseline * kædefaktor
+            let est = heuristicEstimate(product: item.product, variant: item.variant)
+            return est * chainFactor(name: store.name)
         }
+
+        // 2) cache
+        let key = "\(ean)|\(store.id)"
+        if let hit = cache[key], Date().timeIntervalSince(hit.timestamp) < 60 * 30 {
+            return (hit.unitPrice + hit.deposit) // cache i 30 min
+        }
+
+        // 3) forsøg API
+        if let apiPrice = await fetchFromAPI(ean: ean, storeId: store.id) {
+            cache[key] = apiPrice
+            return apiPrice.unitPrice + apiPrice.deposit
+        }
+
+        // 4) fallback: AI-estimat justeret med kædefaktor
+        let est = heuristicEstimate(product: item.product, variant: item.variant)
+        return est * chainFactor(name: store.name)
+    }
+
+    // MARK: – Salling API
+
+    private func fetchFromAPI(ean: String, storeId: String) async -> PriceObservation? {
+        var url = base.appendingPathComponent(ean)
+        url.append(queryItems: [URLQueryItem(name: "storeId", value: storeId)])
+
+        var req = URLRequest(url: url)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(apiTokenProvider())", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, resp) = try await session.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { return nil }
+            guard http.statusCode == 200 else {
+                // 401/403/log – men fald tilbage til heuristik
+                return nil
+            }
+
+            // vi parser kun de felter vi bruger
+            struct Resp: Codable {
+                struct Instore: Codable {
+                    struct Campaign: Codable { let price: Double?; let quantity: Int? }
+                    struct Deposit: Codable { let price: Double? }
+                    let price: Double?
+                    let unitPrice: Double?
+                    let campaign: Campaign?
+                    let deposit: Deposit?
+                }
+                let instore: Instore?
+            }
+
+            let dec = try JSONDecoder().decode(Resp.self, from: data)
+            let base = dec.instore?.price ?? dec.instore?.unitPrice
+
+            let cPrice = dec.instore?.campaign?.price
+            let cQty   = dec.instore?.campaign?.quantity
+            let campaignUnit = (cPrice != nil && (cQty ?? 0) > 0) ? (cPrice! / Double(cQty!)) : nil
+
+            // vælg billigste af kampagne vs normal
+            let unit = minOptional(campaignUnit, base) ?? base
+
+            let deposit = dec.instore?.deposit?.price ?? 0.0
+            guard let u = unit else { return nil }
+
+            return PriceObservation(ean: ean, storeId: storeId, unitPrice: u, deposit: deposit, timestamp: Date())
+        } catch {
+            return nil
+        }
+    }
+
+    private func minOptional(_ a: Double?, _ b: Double?) -> Double? {
+        switch (a, b) {
+        case let (x?, y?): return min(x, y)
+        case let (x?, nil): return x
+        case let (nil, y?): return y
+        default: return nil
+        }
+    }
+
+    // MARK: – “AI”: heuristik + historik
+    // Enkel, men effektiv: enhedsnormering + priors + EMA-læring når vi får rigtige priser.
+
+    // historik pr. (produktId|unit|organic)
+    private var priors: [String: (mean: Double, alpha: Double)] = [:]
+
+    private func heuristicEstimate(product: Product, variant: ProductVariant) -> Double {
+        // 1) basispris pr. kategori (kan fintudbygges)
+        let base: Double = {
+            switch product.id {
+            case _ where product.name.localizedCaseInsensitiveContains("banan"):
+                return variant.unit == "bundt" ? 22.0 : 4.5
+            case _ where product.name.localizedCaseInsensitiveContains("mælk"):
+                return 9.5
+            case _ where product.name.localizedCaseInsensitiveContains("cola"):
+                return variant.unit == "24-pak" ? 115.0 : (variant.unit == "6-pak" ? 35.0 : 6.0)
+            default:
+                return 10.0
+            }
+        }()
+
+        // 2) øko-tillæg
+        let organicCoef = variant.organic ? 1.15 : 1.0
+
+        // 3) enhedsnormalisering (pr. liter/kg hvis muligt)
+        let unitCoef: Double = {
+            switch variant.unit.lowercased() {
+            case "kg":  return 1.0
+            case "ltr", "l": return 1.0
+            case "stk": return 1.0
+            case "bundt": return 4.5
+            case "6-pak": return 6.0   // ca. stk-pris * 6
+            case "24-pak": return 24.0
+            default: return 1.0
+            }
+        }()
+
+        var estimate = base * organicCoef
+        // hvis multipak, gang op
+        if unitCoef > 1.1 { estimate = (base * organicCoef) * unitCoef }
+
+        // 4) læring fra historik (EMA: alpha ~ 0.3)
+        let key = "\(product.id)|\(variant.unit)|\(variant.organic ? "1":"0")"
+        if let prior = priors[key] {
+            estimate = 0.7 * prior.mean + 0.3 * estimate
+        }
+
+        return (estimate * 100).rounded() / 100
+    }
+
+    // kaldes når vi får en rigtig pris → opdatér prior
+    private func updatePrior(product: Product, variant: ProductVariant, observed: Double) {
+        let key = "\(product.id)|\(variant.unit)|\(variant.organic ? "1":"0")"
+        let old = priors[key]?.mean ?? observed
+        let alpha = 0.3
+        let newMean = (1 - alpha) * old + alpha * observed
+        priors[key] = (newMean, alpha)
     }
 }

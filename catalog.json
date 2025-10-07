@@ -1,32 +1,92 @@
-[
-  {"id":"banan","name":"Banan","variants":[{"unit":"stk","organic":false},{"unit":"bundt","organic":false},{"unit":"stk","organic":true},{"unit":"bundt","organic":true}]},
-  {"id":"apple-red","name":"Æbler Røde","variants":[{"unit":"stk","organic":false},{"unit":"kg","organic":false},{"unit":"stk","organic":true},{"unit":"kg","organic":true}]},
-  {"id":"pear","name":"Pærer","variants":[{"unit":"stk","organic":false},{"unit":"kg","organic":false},{"unit":"stk","organic":true},{"unit":"kg","organic":true}]},
-  {"id":"cucumber","name":"Agurk","variants":[{"unit":"stk","organic":false},{"unit":"stk","organic":true}]},
-  {"id":"tomato","name":"Tomater","variants":[{"unit":"bakke","organic":false},{"unit":"kg","organic":false},{"unit":"bakke","organic":true},{"unit":"kg","organic":true}]},
-  {"id":"iceberg","name":"Isberg Salat","variants":[{"unit":"stk","organic":false},{"unit":"stk","organic":true}]},
-  {"id":"potato","name":"Kartofler","variants":[{"unit":"kg","organic":false},{"unit":"pose","organic":false},{"unit":"kg","organic":true},{"unit":"pose","organic":true}]},
-  {"id":"carrot","name":"Gulerødder","variants":[{"unit":"kg","organic":false},{"unit":"pose","organic":false},{"unit":"kg","organic":true},{"unit":"pose","organic":true}]},
-  {"id":"onion-yellow","name":"Løg Gule","variants":[{"unit":"kg","organic":false},{"unit":"pose","organic":false}]},
-  {"id":"milk-1l","name":"Mælk Let 1L","variants":[{"unit":"ltr","organic":false},{"unit":"ltr","organic":true}]},
-  {"id":"milk-skim-1l","name":"Mælk Skummet 1L","variants":[{"unit":"ltr","organic":false},{"unit":"ltr","organic":true}]},
-  {"id":"yoghurt-1l","name":"Yoghurt Naturel 1L","variants":[{"unit":"ltr","organic":false},{"unit":"ltr","organic":true}]},
-  {"id":"butter-200g","name":"Smør Saltet 200g","variants":[{"unit":"stk","organic":false},{"unit":"stk","organic":true}]},
-  {"id":"cheese-slice-400g","name":"Ost Skive 400g","variants":[{"unit":"stk","organic":false},{"unit":"stk","organic":true}]},
-  {"id":"eggs-10","name":"Æg 10 stk","variants":[{"unit":"bakke","organic":false},{"unit":"bakke","organic":true}]},
-  {"id":"rye-bread-1kg","name":"Rugbrød 1kg","variants":[{"unit":"stk","organic":false},{"unit":"stk","organic":true}]},
-  {"id":"white-bread-600g","name":"Hvedebrød 600g","variants":[{"unit":"stk","organic":false}]},
-  {"id":"pasta-penne-500g","name":"Pasta Penne 500g","variants":[{"unit":"stk","organic":false}]},
-  {"id":"spaghetti-500g","name":"Spaghetti 500g","variants":[{"unit":"stk","organic":false}]},
-  {"id":"rice-jasmine-1kg","name":"Ris Jasmin 1kg","variants":[{"unit":"stk","organic":false},{"unit":"kg","organic":false}]},
-  {"id":"tuna-185g","name":"Tun i Vand 185g","variants":[{"unit":"dåse","organic":false}]},
-  {"id":"tomato-chopped-400g","name":"Hakket Tomat 400g","variants":[{"unit":"dåse","organic":false}]},
-  {"id":"baked-beans-415g","name":"Baked Beans 415g","variants":[{"unit":"dåse","organic":false}]},
-  {"id":"corn-340g","name":"Majs 340g","variants":[{"unit":"dåse","organic":false}]},
-  {"id":"chickpeas-400g","name":"Kikærter 400g","variants":[{"unit":"dåse","organic":false}]},
-  {"id":"cola-330","name":"Cola 330 ml Dåse","variants":[{"unit":"stk","organic":false},{"unit":"6-pak","organic":false},{"unit":"24-pak","organic":false}]},
-  {"id":"pepsi-max-330","name":"Pepsi Max 330 ml Dåse","variants":[{"unit":"stk","organic":false},{"unit":"6-pak","organic":false},{"unit":"24-pak","organic":false}]},
-  {"id":"water-still-1_5l","name":"Vand Uden Brus 1.5L","variants":[{"unit":"flaske","organic":false},{"unit":"6-pak","organic":false}]},
-  {"id":"coffee-400g","name":"Kaffe Mellemrist 400g","variants":[{"unit":"stk","organic":false}]},
-  {"id":"sugar-1kg","name":"Sukker 1kg","variants":[{"unit":"stk","organic":false},{"unit":"kg","organic":false}]}
-]
+import Foundation
+
+final class CatalogService {
+    static let shared = CatalogService()
+    private var products: [Product] = []
+    private var eanMap: [String: String] = [:]
+
+    private init() {
+        loadCatalog()
+        loadEANMap()
+        mergeEANs()
+    }
+
+    // MARK: - Public API
+
+    func search(_ query: String) -> [Product] {
+        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        return products.filter { $0.name.lowercased().contains(q) }
+    }
+
+    func all() -> [Product] { products }
+
+    func ean(for product: Product, variant: ProductVariant) -> String? {
+        eanMap[variant.key(productId: product.id)]
+    }
+
+    // MARK: - Private helpers
+
+    private func loadCatalog() {
+        if let url = Bundle.main.url(forResource: "catalog", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([Product].self, from: data) {
+            products = decoded
+        } else {
+            print("⚠️ catalog.json ikke fundet – bruger fallback.")
+            products = fallbackProducts()
+        }
+    }
+
+    private func loadEANMap() {
+        if let url = Bundle.main.url(forResource: "ean-map", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            eanMap = decoded
+        } else {
+            print("ℹ️ ean-map.json ikke fundet – bruger kun fallback EAN’er (hvis nogen).")
+        }
+    }
+
+    /// Tilføjer EAN fra eanMap til produkter
+    private func mergeEANs() {
+        for i in 0..<products.count {
+            var prod = products[i]
+            prod.variants = prod.variants.map { variant in
+                var copy = variant
+                if let ean = eanMap[variant.key(productId: prod.id)] {
+                    // Opdaterer med fundet EAN
+                    copy = ProductVariant(unit: variant.unit,
+                                          organic: variant.organic,
+                                          ean: ean)
+                }
+                return copy
+            }
+            products[i] = prod
+        }
+    }
+
+    // MARK: - Fallback-produkter (bruges kun hvis json mangler)
+    private func fallbackProducts() -> [Product] {
+        return [
+            Product(
+                id: "banana",
+                name: "Banan",
+                variants: [
+                    ProductVariant(unit: "stk", organic: false, ean: "5701234567890"),
+                    ProductVariant(unit: "bundt", organic: false, ean: "5701234567891"),
+                    ProductVariant(unit: "stk", organic: true, ean: "5701234567892"),
+                    ProductVariant(unit: "bundt", organic: true, ean: "5701234567893")
+                ]
+            ),
+            Product(
+                id: "milk-1l",
+                name: "Mælk Let 1L",
+                variants: [
+                    ProductVariant(unit: "ltr", organic: false, ean: "5701170212345"),
+                    ProductVariant(unit: "ltr", organic: true, ean: "5701170212346")
+                ]
+            )
+        ]
+    }
+}
