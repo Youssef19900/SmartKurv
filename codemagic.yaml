@@ -31,13 +31,16 @@ workflows:
           keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
           security find-identity -p codesigning -v || true
 
-      - name: Restore provisioning profile
+      - name: Restore provisioning profile (to standard folder)
         script: |
           set -euxo pipefail
           STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$STD_DIR"
-          echo "$PROFILE_BASE64" | base64 --decode > "$STD_DIR/SmartKurv_AppStore.mobileprovision"
-          ls -la "$STD_DIR"
+          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
+          test -s "$PROFILE_STD"
+          echo "== Installed profiles =="
+          ls -la "$STD_DIR" || true
 
       - name: Configure signing in Xcode project
         script: |
@@ -47,12 +50,10 @@ workflows:
           sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
-
           xcode-project use-profiles --project SmartKurv.xcodeproj
-
           echo "== Build settings =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER'
+            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
 
       - name: Build archive (codesigned)
         script: |
@@ -68,25 +69,35 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      - name: Write exportOptions.plist
+      - name: Detect profile name & Write exportOptions.plist
         script: |
           set -euxo pipefail
-          cat > "$CM_BUILD_DIR/exportOptions.plist" << 'PLIST'
+          PROFILE_STD="$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
+          PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
+          # Udpak mobileprovision til plist og læs det RIGTIGE profilnavn + UUID
+          /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")
+          echo "Bruger provisioning profile: NAME='$PROFILE_NAME' UUID='$PROFILE_UUID'"
+
+          # Skriv exportOptions – brug det faktiske profilnavn
+          cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>GUYJ52Y55V</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>com.youssef19900.SmartKurv</key>
-              <string>SmartKurv_AppStore</string>
+              <key>$APP_BUNDLE_ID</key>
+              <string>$PROFILE_NAME</string>
             </dict>
             <key>uploadSymbols</key><true/>
             <key>compileBitcode</key><false/>
             <key>destination</key><string>export</string>
-            <key>signingStyle</key><string>manual</string>
           </dict>
           </plist>
           PLIST
