@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal have: P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -28,23 +28,22 @@ workflows:
           set -euxo pipefail
           keychain initialize
           P12_PATH="$CM_BUILD_DIR/AppleDistribution.p12"
-          # genskab p12 fra env
           echo "$P12_BASE64" | base64 --decode > "$P12_PATH"
           test -s "$P12_PATH"
           keychain add-certificates --certificate "$P12_PATH" --certificate-password "$P12_PASSWORD"
-          # vis identiteter til debug
           security find-identity -p codesigning -v || true
 
       - name: "Fetch provisioning profiles (existing only)"
         script: |
           set -euxo pipefail
-          echo "Henter EKSISTERENDE profiler fra App Store Connect (ingen --create)..."
+          echo "Henter EKSISTERENDE profiler fra App Store Connect…"
           app-store-connect fetch-signing-files \
             "$APP_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --p12-password "$P12_PASSWORD"     # <- VIGTIGT: tilføjet
           echo "Profiler i standardmappe:"
           ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" || true
 
@@ -52,7 +51,6 @@ workflows:
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
-          # sikr manual + ingen hardcodede CNs/profiler
           /usr/bin/sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           /usr/bin/sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           /usr/bin/sed -i '' \
