@@ -55,6 +55,22 @@ workflows:
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
 
+      # ✅ Sæt unik version/build før vi bygger
+      - name: Bump version & build (ensure)
+        script: |
+          set -euxo pipefail
+          PLIST="Info.plist"
+          # Marketing version (behold eller sæt som ønsket)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
+          # Unikt buildnummer (CM_BUILD_ID eller dato)
+          BUILD_NUM="${CM_BUILD_ID:-$(date +%Y%m%d%H%M)}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
+          echo "== Local plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST"
+
       - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
@@ -69,24 +85,30 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
+      # ✅ Tjek hvad der endte i appens Info.plist i arkivet
+      - name: Verify plist inside archive
+        script: |
+          set -euxo pipefail
+          APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
+          echo "== Archive plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
+
       - name: Detect profile name & Write exportOptions.plist
         script: |
           set -euxo pipefail
           PROFILE_STD="$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
           PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
-          # Udpak mobileprovision til plist og læs det RIGTIGE profilnavn + UUID
           /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")
-          echo "Bruger provisioning profile: NAME='$PROFILE_NAME' UUID='$PROFILE_UUID'"
+          echo "Bruger provisioning profile: NAME='$PROFILE_NAME'"
 
-          # Skriv exportOptions – brug det faktiske profilnavn
           cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store-connect</string>
+            <key>method</key><string>app-store</string>
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
