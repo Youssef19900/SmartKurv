@@ -76,10 +76,17 @@ workflows:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store</string>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>GUYJ52Y55V</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.youssef19900.SmartKurv</key>
+              <string>SmartKurv_AppStore</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>compileBitcode</key><false/>
             <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>manual</string>
           </dict>
           </plist>
           PLIST
