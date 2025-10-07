@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # indeholder: P12_BASE64, P12_PASSWORD, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -43,7 +43,7 @@ workflows:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --p12-password "$P12_PASSWORD"     # <- VIGTIGT: tilføjet
+            --p12-password "$P12_PASSWORD"
           echo "Profiler i standardmappe:"
           ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" || true
 
@@ -58,10 +58,7 @@ workflows:
             -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' \
             "$PBX" || true
 
-          # brug profiler fra standardplacering
           xcode-project use-profiles --project SmartKurv.xcodeproj
-
-          echo "== Build settings (uddrag) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_IDENTITY' || true
 
