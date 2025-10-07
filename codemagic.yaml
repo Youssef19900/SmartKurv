@@ -64,7 +64,7 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
           # Unikt buildnummer (CM_BUILD_ID eller dato)
-          BUILD_NUM="${CM_BUILD_ID:-$(date +%Y%m%d%H%M)}"
+          BUILD_NUM="$(date +%Y%m%d%H%M)"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
           echo "== Local plist =="
