@@ -71,7 +71,7 @@ struct SearchPage: View {
                         // Søg + forslag
                         VStack(spacing: 8) {
                             HStack(spacing: 12) {
-                                TextField("Søg fx “banan”", text: $app.searchQuery)
+                                TextField("Søg fx “banan”", text: $app.Query)
                                     .textInputAutocapitalization(.never)
                                     .disableAutocorrection(true)
                                     .padding(.vertical, 12)
@@ -79,7 +79,7 @@ struct SearchPage: View {
                                     .background(Theme.card)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .foregroundColor(Theme.text1)
-                                    .onChange(of: app.searchQuery) { newValue in
+                                    .onChange(of: app.Query) { newValue in
                                         updateSuggestions(for: newValue)
                                     }
 
@@ -97,7 +97,7 @@ struct SearchPage: View {
                                     VStack(alignment: .leading, spacing: 8) {
                                         ForEach(suggestions, id: \.self) { name in
                                             Button {
-                                                app.searchQuery = name
+                                                app.Query = name
                                                 withAnimation { showSuggestions = false }
                                                 app.performSearch()
                                             } label: {
