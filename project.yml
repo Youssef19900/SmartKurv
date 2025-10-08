@@ -26,8 +26,6 @@ targets:
           - Assets.xcassets
           - LaunchScreen.storyboard
           - Resources
-          - Views.swift            # <- udeluk gammel samlet fil, der kolliderer med UI/*
-          - "*.swift.txt"          # <- undgå fejl hvis en fil er gemt som .swift.txt
 
     # Ressourcer (kopieres til app-bundlen)
     resources:
@@ -36,8 +34,6 @@ targets:
       - path: Resources
         optional: true
         includes:
-          - "*.json"
-          - "*.csv"
 
     info:
       path: Info.plist
