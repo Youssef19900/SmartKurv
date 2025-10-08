@@ -8,24 +8,21 @@ struct RootView: View {
             SearchTab()
                 .tabItem { Label("Søg", systemImage: "magnifyingglass") }
 
-            // Badge må ikke være nil – tilføj den kun når > 0
-            shoppingTab
+            // Tilføj badge kun når der er varer
+            Group {
+                if app.cartItemCount > 0 {
+                    ShoppingListTab()
+                        .tabItem { Label("Indkøb", systemImage: "cart") }
+                        .badge(app.cartItemCount)
+                } else {
+                    ShoppingListTab()
+                        .tabItem { Label("Indkøb", systemImage: "cart") }
+                }
+            }
 
             HistoryTab()
                 .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
         }
-        .background(Theme.bgGradient.ignoresSafeArea()) // brug bgGradient fra Theme
-    }
-
-    @ViewBuilder
-    private var shoppingTab: some View {
-        if app.cartItemCount > 0 {
-            ShoppingListTab()
-                .tabItem { Label("Indkøb", systemImage: "cart") }
-                .badge(app.cartItemCount)  // kun her
-        } else {
-            ShoppingListTab()
-                .tabItem { Label("Indkøb", systemImage: "cart") }
-        }
+        .background(Theme.bgGradient.ignoresSafeArea())
     }
 }
