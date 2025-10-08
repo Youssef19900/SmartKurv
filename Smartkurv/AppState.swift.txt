@@ -6,10 +6,10 @@ import Combine
 final class AppState: ObservableObject {
 
     // MARK: - Søg
-    @Published var query: String = ""                  // bruges af SearchTab (.searchable)
+    @Published var query: String = ""                  // bruges i Views/Search
     @Published var searchResults: [Product] = []
 
-    // Avanceret valg pr. produkt (kompatibilitet til tidligere UI)
+    // Beholdt til UI der vælger enhed/øko pr. produkt
     @Published var selectedVariant: [String: ProductVariant] = [:]
     @Published var isOrganic: [String: Bool] = [:]
 
@@ -17,7 +17,7 @@ final class AppState: ObservableObject {
     @Published var currentList: ShoppingList = ShoppingList()
     @Published var history: [ShoppingList] = []
 
-    // Badge i UI
+    // Badge i UI (antal stk. i kurven)
     var cartItemCount: Int {
         currentList.items.reduce(0) { $0 + $1.qty }
     }
@@ -31,7 +31,6 @@ final class AppState: ObservableObject {
     let locationManager = LocationManager()
 
     // MARK: - Søgning
-
     func runSearch() {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { searchResults = []; return }
@@ -43,7 +42,7 @@ final class AppState: ObservableObject {
         product.variants.first ?? ProductVariant(unit: "stk", organic: false, ean: nil)
     }
 
-    // Brugeren ændrer enhed (hvis du har sådan et UI et sted)
+    // Brugeren ændrer enhed (hvis UI’et har enhedsvælger)
     func setUnit(for product: Product, unit: String) {
         let baseOrganic = isOrganic[product.id] ?? defaultVariant(for: product).organic
         let temp = ProductVariant(unit: unit, organic: baseOrganic, ean: nil)
@@ -55,7 +54,7 @@ final class AppState: ObservableObject {
         selectedVariant[product.id] = resolved
     }
 
-    // Brugeren toggler øko (hvis du har sådan et UI et sted)
+    // Brugeren toggler øko (hvis UI’et har øko-toggle)
     func toggleOrganic(for product: Product, value: Bool) {
         let baseUnit = (selectedVariant[product.id]?.unit) ?? defaultVariant(for: product).unit
         let temp = ProductVariant(unit: baseUnit, organic: value, ean: nil)
@@ -68,20 +67,22 @@ final class AppState: ObservableObject {
         isOrganic[product.id] = value
     }
 
-    // MARK: - Læg i kurven (primær)
+    // MARK: - Læg i kurven (primær – bruges når variant er kendt)
     func addToList(product: Product, variant: ProductVariant, qty: Int = 1) {
-        // Sørg for at varianten har EAN hvis muligt (fra ean-map eller varianten selv)
+        // Sørg for EAN hvis muligt (fra ean-map eller varianten selv)
         let resolvedEAN = CatalogService.shared.ean(for: product, variant: variant)
         let finalVariant = ProductVariant(unit: variant.unit, organic: variant.organic, ean: resolvedEAN)
 
-        if let idx = currentList.items.firstIndex(where: { $0.product.id == product.id && $0.variant == finalVariant }) {
+        if let idx = currentList.items.firstIndex(where: {
+            $0.product.id == product.id && $0.variant == finalVariant
+        }) {
             currentList.items[idx].qty += qty
         } else {
             currentList.items.append(ShoppingItem(product: product, variant: finalVariant, qty: qty))
         }
     }
 
-    // MARK: - Læg i kurven (overload til gamle kald uden variant)
+    // Bekvemmelighed: tillad gamle kald uden variant
     func addToList(product: Product) {
         let v = selectedVariant[product.id] ?? defaultVariant(for: product)
         addToList(product: product, variant: v, qty: 1)
@@ -99,14 +100,12 @@ final class AppState: ObservableObject {
     // Gem som handlet → historik
     func commitCurrentListToHistory() {
         guard !currentList.items.isEmpty else { return }
-        var copy = currentList
-        copy = ShoppingList(items: copy.items, createdAt: Date())
-        history.insert(copy, at: 0)
+        let snapshot = ShoppingList(items: currentList.items, createdAt: Date())
+        history.insert(snapshot, at: 0)
         currentList = ShoppingList()
     }
 
     // MARK: - Find billigst
-
     func findCheapest(location: CLLocation?) async {
         isFindingCheapest = true
         errorMessage = nil
