@@ -1,113 +1,97 @@
 import SwiftUI
 
 struct SearchTab: View {
-    @State private var query = ""
-    @State private var results: [Product] = []
-    @State private var selectedProduct: Product?
-    @State private var selectedVariant: ProductVariant?
-    @State private var isOrganic = false
-
-    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var app: AppState
+    @State private var suggestions: [String] = []
 
     var body: some View {
-        ZStack {
-            Theme.bgGradient.ignoresSafeArea()   // 👈 Baggrundsfarve
-
-            VStack(spacing: 20) {
-
-                // MARK: - Header med titel + kurv badge
-                HStack {
-                    Text("Søg")
-                        .font(.largeTitle.bold())
-                        .foregroundColor(Theme.text1)
-
-                    Spacer()
-
-                    // Kurv med antal varer
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "cart.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(Theme.accent)
-
-                        if appState.currentList.items.count > 0 {
-                            Text("\(appState.currentList.items.count)")
-                                .font(.caption2.bold())
-                                .foregroundColor(.white)
-                                .padding(4)
-                                .background(Circle().fill(Theme.accent))
-                                .offset(x: 8, y: -8)
+        NavigationStack {
+            VStack(spacing: 0) {
+                // SØGEFELT I TOPPEN
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                    TextField("Søg fx “banan”", text: $app.query)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .onChange(of: app.query) { newValue in
+                            updateSuggestions(for: newValue)
                         }
+                        .onSubmit {
+                            app.runSearch()
+                        }
+                    if !app.query.isEmpty {
+                        Button {
+                            app.query = ""
+                            app.searchResults = []
+                            suggestions = []
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal)
+                .padding(12)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding([.horizontal, .top])
 
-                // MARK: - Søgning
-                HStack {
-                    TextField("Søg efter vare...", text: $query)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal)
-                        .onSubmit { performSearch() }
-
-                    Button("Søg") { performSearch() }
-                        .buttonStyle(PrimaryButton())
-                        .frame(width: 80)
-                }
-
-                // MARK: - Resultater
-                if let product = selectedProduct {
-                    VStack(spacing: 12) {
-                        Text(product.name)
-                            .font(.title3.bold())
-                            .foregroundColor(Theme.text1)
-
-                        Picker("Enhed", selection: Binding(
-                            get: { selectedVariant?.unit ?? "" },
-                            set: { unit in
-                                selectedVariant = product.variants.first { $0.unit == unit && $0.organic == isOrganic }
-                            }
-                        )) {
-                            ForEach(product.variants.filter { $0.organic == isOrganic }, id: \.unit) { variant in
-                                Text(variant.unit.uppercased()).tag(variant.unit)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
-
-                        Toggle("Øko", isOn: $isOrganic)
-                            .toggleStyle(SwitchToggleStyle(tint: Theme.accent))
-                            .padding(.horizontal)
-                            .onChange(of: isOrganic) { _ in
-                                if let p = selectedProduct {
-                                    selectedVariant = p.variants.first { $0.unit == selectedVariant?.unit && $0.organic == isOrganic }
+                // RESULTATER / SUGGESTIONS
+                List {
+                    if suggestions.count > 0 && app.searchResults.isEmpty {
+                        Section("Forslag") {
+                            ForEach(suggestions, id: \.self) { s in
+                                Button(s) {
+                                    app.query = s
+                                    app.runSearch()
                                 }
                             }
-
-                        Button {
-                            if let product = selectedProduct, let variant = selectedVariant {
-                                appState.addToList(product: product, variant: variant)
-                            }
-                        } label: {
-                            Label("Læg i kurven", systemImage: "plus.circle.fill")
                         }
-                        .buttonStyle(PrimaryButton())
-                        .padding(.horizontal)
                     }
-                    .transition(.opacity)
-                } else {
-                    Spacer()
-                }
 
-                Spacer()
+                    Section("Resultater") {
+                        ForEach(app.searchResults, id: \.id) { product in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(product.name)
+                                        .font(.headline)
+                                    Text(product.variants.first?.displayName ?? "")
+                                        .font(.subheadline)
+                                        .foregroundStyle(Theme.text2)
+                                }
+                                Spacer()
+                                Button {
+                                    let variant = app.defaultVariant(for: product)
+                                    app.addToList(product: product, variant: variant)
+                                } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .imageScale(.large)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
             }
-            .padding(.top, 20)
+            .navigationTitle("Søg")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    CartBadgeButton()
+                }
+            }
         }
+        .background(Theme.bgGradient.ignoresSafeArea())
     }
 
-    // MARK: - Handling
-    private func performSearch() {
-        let matches = CatalogService.shared.search(query)
-        results = matches
-        selectedProduct = matches.first
-        selectedVariant = matches.first?.variants.first
+    private func updateSuggestions(for text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { suggestions = []; return }
+        // Meget simpel “autocomplete”: tag de første 5 fra katalog der matcher
+        let names = CatalogService.shared.all().map(\.name)
+        suggestions = names
+            .filter { $0.localizedCaseInsensitiveContains(t) }
+            .prefix(5)
+            .map { $0 }
     }
 }

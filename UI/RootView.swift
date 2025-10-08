@@ -4,20 +4,28 @@ struct RootView: View {
     @EnvironmentObject var app: AppState
 
     var body: some View {
-        ZStack {
-            Theme.bg.ignoresSafeArea()     // baggrundsgradient 100%
+        TabView {
+            SearchTab()
+                .tabItem { Label("Søg", systemImage: "magnifyingglass") }
 
-            TabView {
-                SearchTab()
-                    .tabItem { Label("Søg", systemImage: "magnifyingglass") }
+            // Badge må ikke være nil – tilføj den kun når > 0
+            shoppingTab
 
-                ShoppingListTab()
-                    .tabItem { Label("Indkøb", systemImage: "cart") }
-                    .badge(app.cartItemCount == 0 ? nil : String(app.cartItemCount))
+            HistoryTab()
+                .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
+        }
+        .background(Theme.bgGradient.ignoresSafeArea()) // brug bgGradient fra Theme
+    }
 
-                HistoryTab()
-                    .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
-            }
+    @ViewBuilder
+    private var shoppingTab: some View {
+        if app.cartItemCount > 0 {
+            ShoppingListTab()
+                .tabItem { Label("Indkøb", systemImage: "cart") }
+                .badge(app.cartItemCount)  // kun her
+        } else {
+            ShoppingListTab()
+                .tabItem { Label("Indkøb", systemImage: "cart") }
         }
     }
 }
