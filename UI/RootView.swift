@@ -1,33 +1,20 @@
 import SwiftUI
 
 struct RootView: View {
-    @StateObject private var app = AppState()
+    @EnvironmentObject var app: AppState
 
     var body: some View {
         TabView {
             SearchTab()
-                .environmentObject(app)
                 .tabItem { Label("Søg", systemImage: "magnifyingglass") }
 
             ShoppingListTab()
-                .environmentObject(app)
-                .tabItem { Label("Indkøbsliste", systemImage: "cart") }
+                .tabItem { Label("Indkøb", systemImage: "cart") }
+                .badge(app.cartItemCount > 0 ? app.cartItemCount : nil)
 
             HistoryTab()
-                .environmentObject(app)
-                .tabItem { Label("Tidligere lister", systemImage: "clock") }
+                .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
         }
-        .onAppear {
-            // TODO: byt til rigtig token (eller hent fra Keychain)
-            PricingService.shared.apiTokenProvider = { "DIN_SALLING_TOKEN" }
-        }
+        .background(Theme.bg.ignoresSafeArea())
     }
 }
-
-#if DEBUG
-struct RootView_Previews: PreviewProvider {
-    static var previews: some View {
-        RootView()
-    }
-}
-#endif
