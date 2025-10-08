@@ -57,7 +57,7 @@ struct HistoryTab: View {
             .navigationTitle("Historik")
             .navigationBarTitleDisplayMode(.inline) // mindre titel
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton() // kurv-ikon med badge
                         .environmentObject(app)
                 }

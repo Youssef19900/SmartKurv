@@ -13,7 +13,7 @@ struct RootView: View {
 
                 ShoppingListTab()
                     .tabItem { Label("Indkøb", systemImage: "cart") }
-                    .badge(app.cartItemCount > 0 ? app.cartItemCount : nil)
+                    .badge(app.cartItemCount == 0 ? nil : String(app.cartItemCount))
 
                 HistoryTab()
                     .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }

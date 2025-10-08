@@ -89,7 +89,7 @@ struct ShoppingListTab: View {
             .navigationTitle("Indkøb")
             .navigationBarTitleDisplayMode(.inline) // mindre titel
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                         .environmentObject(app) // badge med antal varer
                 }
