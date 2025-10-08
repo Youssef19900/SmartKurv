@@ -1,0 +1,75 @@
+name: SmartKurv
+options:
+  minimumXcodeGenVersion: 2.37.0
+
+targets:
+  SmartKurv:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+
+    # Kilde-filer (matcher din nye struktur)
+    sources:
+      - path: API
+      - path: UI
+      - path: Location
+      - path: Theme.swift         # hvis den ligger i roden
+      - path: SmartKurvApp.swift  # hvis den ligger i roden
+      # Fald tilbage: alt andet kode i roden (ekskl. filer herunder)
+      - path: .
+        excludes:
+          - project.yml
+          - codemagic.yaml
+          - README.md
+          - .git
+          - .github
+          - Assets.xcassets
+          - LaunchScreen.storyboard
+          - Resources
+
+    # Ressourcer (kopieres til app-bundlen)
+    resources:
+      - Assets.xcassets
+      - LaunchScreen.storyboard
+      - path: Resources                # hele mappen med datafiler
+        optional: true
+        excludes:
+          - "*.psd"
+          - "*.md"
+
+    info:
+      path: Info.plist
+
+    settings:
+      base:
+        SWIFT_VERSION: 5.0
+        PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
+        DEVELOPMENT_TEAM: GUYJ52Y55V
+
+        # Codesigning (Codemagic "use-profiles" sætter profilerne)
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Apple Distribution"
+        CODE_SIGN_IDENTITY[sdk=iphoneos*]: "Apple Distribution"
+        PROVISIONING_PROFILE_SPECIFIER: ""
+        PROVISIONING_PROFILE: ""
+
+        # App icon (skal matche navnet i Assets.xcassets)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+        # Kun iPhone
+        TARGETED_DEVICE_FAMILY: "1"
+
+        # Versioner (kan også ligge i Info.plist)
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+
+      # Gør Previews glade i Debug, og hurtig kode i Release
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+    scheme:
+      name: SmartKurv
+      testTargets: []

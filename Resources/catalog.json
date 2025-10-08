@@ -1,0 +1,111 @@
+import Foundation
+
+final class CatalogService {
+    static let shared = CatalogService()
+    private var products: [Product] = []
+    private var eanMap: [String: String] = [:]
+
+    private init() {
+        loadCatalog()
+        loadEANMap()
+        mergeEANs()
+    }
+
+    // MARK: - Public API
+
+    func search(_ query: String) -> [Product] {
+        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        return products.filter { $0.name.lowercased().contains(q) }
+    }
+
+    func all() -> [Product] { products }
+
+    /// Slår EAN op. Brug mapping først, ellers variantens egen ean.
+    func ean(for product: Product, variant: ProductVariant) -> String? {
+        eanMap[variant.key(productId: product.id)] ?? variant.ean
+    }
+
+    // MARK: - Private helpers
+
+    /// Finder en ressource i bundlen, også hvis den ligger i en undermappe (fx "Resources/")
+    private func url(for name: String, ext: String) -> URL? {
+        // 1) standard lookup
+        if let u = Bundle.main.url(forResource: name, withExtension: ext) { return u }
+
+        // 2) prøv i en "Resources" undermappe (typisk når mappen er en blue folder reference)
+        if let base = Bundle.main.resourceURL {
+            let candidate = base.appendingPathComponent("Resources").appendingPathComponent("\(name).\(ext)")
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+
+        // 3) sidste udvej: scan hele bundle-resourcemappen
+        if let base = Bundle.main.resourceURL,
+           let e = FileManager.default.enumerator(at: base, includingPropertiesForKeys: nil) {
+            for case let fileURL as URL in e where fileURL.lastPathComponent == "\(name).\(ext)" {
+                return fileURL
+            }
+        }
+        return nil
+    }
+
+    private func loadCatalog() {
+        if let url = url(for: "catalog", ext: "json"),
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([Product].self, from: data) {
+            products = decoded
+        } else {
+            print("⚠️ catalog.json ikke fundet – bruger fallback.")
+            products = fallbackProducts()
+        }
+    }
+
+    private func loadEANMap() {
+        if let url = url(for: "ean-map", ext: "json"),
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            eanMap = decoded
+        } else {
+            print("ℹ️ ean-map.json ikke fundet – kører videre uden mapping.")
+        }
+    }
+
+    /// Fletter EAN’er fra eanMap ind i produkterne
+    private func mergeEANs() {
+        guard !eanMap.isEmpty else { return }
+        for i in 0..<products.count {
+            var p = products[i]
+            p.variants = p.variants.map { v in
+                if let mapped = eanMap[v.key(productId: p.id)] {
+                    return ProductVariant(unit: v.unit, organic: v.organic, ean: mapped)
+                }
+                return v
+            }
+            products[i] = p
+        }
+    }
+
+    // MARK: - Fallback-produkter (bruges kun hvis json mangler)
+    private func fallbackProducts() -> [Product] {
+        return [
+            Product(
+                id: "banana",
+                name: "Banan",
+                variants: [
+                    ProductVariant(unit: "stk",   organic: false, ean: "5701234567890"),
+                    ProductVariant(unit: "bundt", organic: false, ean: "5701234567891"),
+                    ProductVariant(unit: "stk",   organic: true,  ean: "5701234567892"),
+                    ProductVariant(unit: "bundt", organic: true,  ean: "5701234567893")
+                ]
+            ),
+            Product(
+                id: "milk-1l",
+                name: "Mælk Let 1L",
+                variants: [
+                    ProductVariant(unit: "ltr", organic: false, ean: "5701170212345"),
+                    ProductVariant(unit: "ltr", organic: true,  ean: "5701170212346")
+                ]
+            )
+        ]
+    }
+}

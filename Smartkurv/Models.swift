@@ -4,21 +4,21 @@ import Foundation
 
 struct Product: Identifiable, Codable, Hashable {
     let id: String            // fx "banana"
-    let name: String          // visningsnavn i UI
-    var variants: [ProductVariant]  // var, så CatalogService kan indsætte EAN’er
+    let name: String          // visningsnavn
+    var variants: [ProductVariant]  // var så CatalogService kan indsætte EAN'er
 }
 
 struct ProductVariant: Codable, Hashable {
-    let unit: String          // "stk", "bundt", "ltr", "kg", "dåse" osv.
+    let unit: String          // "stk", "bundt", "ltr", "kg", "dåse", ...
     let organic: Bool         // økologisk?
-    let ean: String?          // valgfri EAN til Salling API
+    let ean: String?          // valgfri – bruges til Salling API
 
-    /// Vist navn i UI – bruges i Søg-fanen og Indkøbsliste
+    /// Pænt navn til UI
     var displayName: String {
         organic ? "\(unit.capitalized) • Øko" : unit.capitalized
     }
 
-    /// Nøgle brugt til ean-map.json og slå-op-funktioner
+    /// Nøgle der matcher ean-map.json ("productId|unit|0/1")
     func key(productId: String) -> String {
         "\(productId)|\(unit)|\(organic ? "1" : "0")"
     }
@@ -52,18 +52,18 @@ struct ShoppingList: Identifiable, Codable, Hashable {
     }
 }
 
-// MARK: - Butik / totalpris til UI
+// MARK: - Butikker / totalpris
 
-/// Samlet pris pr. butik, bruges til "Find billigst i nærheden"
+/// Totalpris til visning i "Find billigst"
 struct StoreTotal: Identifiable, Hashable {
     let id = UUID()
     let storeName: String
     let total: Double
 }
 
-/// Butiksmodel (til geo-filter og prisopslag)
+/// Butik (bruges når du senere henter rigtige butikker + geo)
 struct Store: Identifiable, Codable, Hashable {
-    let id: String      // Salling storeId
+    let id: String        // Salling storeId
     let name: String
     let lat: Double
     let lon: Double
