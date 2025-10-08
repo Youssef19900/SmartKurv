@@ -5,9 +5,6 @@ struct ShoppingListTab: View {
 
     var body: some View {
         NavigationStack {
-            // ... din liste/indhold ...
-
-            // eksempel:
             List {
                 ForEach(app.currentList.items) { item in
                     HStack {
@@ -19,12 +16,15 @@ struct ShoppingListTab: View {
                 }
             }
             .navigationTitle("Indkøb")
-            .toolbar {       // Gør toolbaren entydig med ToolbarItem
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
-                }
-            }
+            .toolbar(content: shoppingToolbar)  // <- eksplicit content-funktion
         }
         .background(Theme.bgGradient.ignoresSafeArea())
+    }
+
+    @ToolbarContentBuilder
+    private func shoppingToolbar() -> some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            CartBadgeButton()
+        }
     }
 }

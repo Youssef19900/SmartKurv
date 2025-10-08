@@ -20,12 +20,16 @@ struct HistoryTab: View {
                 }
             }
             .navigationTitle("Historik")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
-                }
-            }
+            .toolbar(content: historyToolbar)   // <- eksplicit content-funktion
         }
         .background(Theme.bgGradient.ignoresSafeArea())
+    }
+
+    // Gør det tydeligt for compileren at dette er ToolbarContent
+    @ToolbarContentBuilder
+    private func historyToolbar() -> some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            CartBadgeButton()
+        }
     }
 }

@@ -8,21 +8,25 @@ struct RootView: View {
             SearchTab()
                 .tabItem { Label("Søg", systemImage: "magnifyingglass") }
 
-            // Tilføj badge kun når der er varer
-            Group {
-                if app.cartItemCount > 0 {
-                    ShoppingListTab()
-                        .tabItem { Label("Indkøb", systemImage: "cart") }
-                        .badge(app.cartItemCount)
-                } else {
-                    ShoppingListTab()
-                        .tabItem { Label("Indkøb", systemImage: "cart") }
-                }
-            }
+            ShoppingListTab()
+                .tabItem { Label("Indkøb", systemImage: "cart") }
+                .badgeIfNeeded(app.cartItemCount)   // <- brug helperen herunder
 
             HistoryTab()
                 .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
         }
         .background(Theme.bgGradient.ignoresSafeArea())
+    }
+}
+
+// Gør badge betinget uden 'nil' (undgår overload-problemet)
+private extension View {
+    @ViewBuilder
+    func badgeIfNeeded(_ count: Int) -> some View {
+        if count > 0 {
+            self.badge(count)   // Int-overload
+        } else {
+            self                 // ingen badge
+        }
     }
 }
