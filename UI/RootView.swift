@@ -4,20 +4,29 @@ struct RootView: View {
     @EnvironmentObject var app: AppState
 
     var body: some View {
-        ZStack {
-            Theme.bg.ignoresSafeArea()     // baggrundsgradient 100%
+        TabView {
+            SearchTab()
+                .tabItem { Label("Søg", systemImage: "magnifyingglass") }
 
-            TabView {
-                SearchTab()
-                    .tabItem { Label("Søg", systemImage: "magnifyingglass") }
+            ShoppingListTab()
+                .tabItem { Label("Indkøb", systemImage: "cart") }
+                .badgeIfNeeded(app.cartItemCount)   // <- brug helperen herunder
 
-                ShoppingListTab()
-                    .tabItem { Label("Indkøb", systemImage: "cart") }
-                    .badge(app.cartItemCount == 0 ? nil : String(app.cartItemCount))
+            HistoryTab()
+                .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
+        }
+        .background(Theme.bgGradient.ignoresSafeArea())
+    }
+}
 
-                HistoryTab()
-                    .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
-            }
+// Gør badge betinget uden 'nil' (undgår overload-problemet)
+private extension View {
+    @ViewBuilder
+    func badgeIfNeeded(_ count: Int) -> some View {
+        if count > 0 {
+            self.badge(count)   // Int-overload
+        } else {
+            self                 // ingen badge
         }
     }
 }
