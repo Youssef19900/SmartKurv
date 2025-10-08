@@ -11,13 +11,16 @@ enum Theme {
         endPoint: .bottomTrailing
     )
 
+    // 🔧 Alias så ældre views der bruger Theme.bg stadig virker
+    static let bg: LinearGradient = Theme.bgGradient
+
     // Kort og elementer
     static let card    = Color(red: 0.11, green: 0.12, blue: 0.14)
     static let text1   = Color.white
     static let text2   = Color(red: 0.74, green: 0.75, blue: 0.77)
     static let accent  = Color(red: 0.05, green: 0.52, blue: 0.98)
     static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
-    static let warning = Color(red: 1.0, green: 0.75, blue: 0.15)
+    static let warning = Color(red: 1.00, green: 0.75, blue: 0.15)
 }
 
 // MARK: - Genbrugelige komponenter

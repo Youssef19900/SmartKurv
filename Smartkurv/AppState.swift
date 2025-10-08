@@ -9,7 +9,7 @@ final class AppState: ObservableObject {
     @Published var query: String = ""                  // bruges af SearchTab (.searchable)
     @Published var searchResults: [Product] = []
 
-    // Evt. avanceret valg pr. produkt (beholdt for kompatibilitet)
+    // Avanceret valg pr. produkt (kompatibilitet til tidligere UI)
     @Published var selectedVariant: [String: ProductVariant] = [:]
     @Published var isOrganic: [String: Bool] = [:]
 
@@ -17,7 +17,7 @@ final class AppState: ObservableObject {
     @Published var currentList: ShoppingList = ShoppingList()
     @Published var history: [ShoppingList] = []
 
-    // Bruges til badge i UI
+    // Badge i UI
     var cartItemCount: Int {
         currentList.items.reduce(0) { $0 + $1.qty }
     }
@@ -68,7 +68,7 @@ final class AppState: ObservableObject {
         isOrganic[product.id] = value
     }
 
-    // MARK: - Læg i kurven
+    // MARK: - Læg i kurven (primær)
     func addToList(product: Product, variant: ProductVariant, qty: Int = 1) {
         // Sørg for at varianten har EAN hvis muligt (fra ean-map eller varianten selv)
         let resolvedEAN = CatalogService.shared.ean(for: product, variant: variant)
@@ -79,6 +79,12 @@ final class AppState: ObservableObject {
         } else {
             currentList.items.append(ShoppingItem(product: product, variant: finalVariant, qty: qty))
         }
+    }
+
+    // MARK: - Læg i kurven (overload til gamle kald uden variant)
+    func addToList(product: Product) {
+        let v = selectedVariant[product.id] ?? defaultVariant(for: product)
+        addToList(product: product, variant: v, qty: 1)
     }
 
     // Ændr antal (+/-)
