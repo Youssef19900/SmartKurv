@@ -22,6 +22,7 @@ targets:
           - SmartKurvApp.swift
 
     resources:
+      # 👉 Peg KUN på denne assets-katalog
       - path: Assets.xcassets
         optional: false
       - LaunchScreen.storyboard
@@ -36,13 +37,18 @@ targets:
 
     settings:
       base:
+        # Plist + AppIcon-opsætning
         INFOPLIST_FILE: Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
-        DEVELOPMENT_TEAM: GUYJ52Y55V
-        CODE_SIGN_STYLE: Manual
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleIconName: AppIcon
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+
+        # Bundle & signing (tilpas kun hvis nødvendigt)
+        PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
+        DEVELOPMENT_TEAM: GUYJ52Y55V
+        CODE_SIGN_STYLE: Manual
+
+        # iOS / Swift
         SWIFT_VERSION: 5.0
         TARGETED_DEVICE_FAMILY: "1"
 

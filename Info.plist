@@ -2,7 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Basis -->
   <key>CFBundleName</key>
   <string>SmartKurv</string>
   <key>CFBundleIdentifier</key>
@@ -12,35 +11,29 @@
   <key>CFBundleVersion</key>
   <string>1</string>
 
-  <!-- Launch screen -->
+  <!-- 👇 vigtig: matcher project.yml -->
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
+
   <key>UILaunchStoryboardName</key>
   <string>LaunchScreen</string>
 
-  <!-- Kun iPhone -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+
   <key>UIDeviceFamily</key>
   <array>
     <integer>1</integer>
   </array>
 
-  <!-- Orienteringer -->
-  <key>UISupportedInterfaceOrientations</key>
-  <array>
-    <string>UIInterfaceOrientationPortrait</string>
-    <string>UIInterfaceOrientationPortraitUpsideDown</string>
-    <string>UIInterfaceOrientationLandscapeLeft</string>
-    <string>UIInterfaceOrientationLandscapeRight</string>
-  </array>
-
-  <!-- Tilladelser -->
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>SmartKurv bruger din lokation til at finde billigste butikker i nærheden.</string>
 
-  <!-- Dark mode -->
   <key>UIUserInterfaceStyle</key>
   <string>Dark</string>
-
-  <!-- Ikoner via Asset Catalog -->
-  <key>CFBundleIconName</key>
-  <string>AppIcon</string>
 </dict>
 </plist>
