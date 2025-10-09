@@ -9,6 +9,7 @@ workflows:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
+        ICON_SET_PATH: Smartkurv/Assets.xcassets/AppIcon.appiconset
 
     scripts:
       - name: Install tools
@@ -26,12 +27,12 @@ workflows:
       - name: Quick sanity (assets + build settings)
         script: |
           set -euxo pipefail
-          echo "== Assets directory =="
-          ls -la Assets.xcassets || true
+          echo "== Assets directory (root) =="
+          ls -la Smartkurv/Assets.xcassets || true
           echo "== AppIcon set =="
-          ls -la Assets.xcassets/AppIcon.appiconset || true
+          ls -la "$ICON_SET_PATH" || true
           echo "Contents.json:"
-          cat Assets.xcassets/AppIcon.appiconset/Contents.json || true
+          cat "$ICON_SET_PATH/Contents.json" || true
           echo "== Build settings (excerpt) =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -Ei 'ASSETCATALOG|ICON|INFOPLIST_FILE|PRODUCT_BUNDLE_IDENTIFIER' || true
@@ -39,7 +40,7 @@ workflows:
       - name: Validate AppIcon sizes
         script: |
           set -euxo pipefail
-          cd Assets.xcassets/AppIcon.appiconset
+          cd "$ICON_SET_PATH"
           for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
             test -f "$f" || { echo "Mangler $f"; exit 1; }
           done
@@ -56,7 +57,7 @@ workflows:
       - name: Remove alpha on 1024 (marketing)
         script: |
           set -euxo pipefail
-          cd Assets.xcassets/AppIcon.appiconset
+          cd "$ICON_SET_PATH"
           HAS_ALPHA=$(sips -g hasAlpha AppIcon-1024.png | awk '/hasAlpha/ {print $2}')
           if [ "$HAS_ALPHA" = "yes" ]; then
             brew install imagemagick
@@ -100,7 +101,6 @@ workflows:
           BUILD_NUM="$(date +%Y%m%d%H%M)"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-          # Sørg for AppIcon-navn i lokal plist (kun info, Xcode bruger asset catalogen)
           /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
 
@@ -122,8 +122,13 @@ workflows:
         script: |
           set -euxo pipefail
           APP_PATH="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
-          ls -la "$APP_PATH/Assets.car"
-          /usr/bin/assetutil --info "$APP_PATH/Assets.car" | head -n 200 || true
+          if [ -f "$APP_PATH/Assets.car" ]; then
+            ls -la "$APP_PATH/Assets.car"
+            /usr/bin/assetutil --info "$APP_PATH/Assets.car" | head -n 200 || true
+          else
+            echo "⚠️ Ingen Assets.car i appen – tjek at project.yml resources peger på 'Smartkurv/Assets.xcassets'."
+            ls -la "$APP_PATH" || true
+          fi
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
