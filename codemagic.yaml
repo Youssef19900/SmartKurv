@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv
+        - smartkurv   # P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -101,17 +101,27 @@ workflows:
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
           echo "CFBundleIconName:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "NOT SET")
 
-      - name: 🩹 Patch archive Info.plist if CFBundleIconName missing
+      - name: 🩹 Patch archive Info.plist (force icon keys)
         script: |
           set -euxo pipefail
           APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
-          if ! /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" >/dev/null 2>&1; then
-            echo "Patching archive Info.plist: CFBundleIconName -> AppIcon"
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP_PLIST" || \
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP_PLIST" || true
-          fi
-          echo "After patch:"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "STILL MISSING"
+
+          # 1) CFBundleIconName = AppIcon
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP_PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP_PLIST"
+
+          # 2) Sæt hele CFBundleIcons-træet
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName string AppIcon" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:0 string AppIcon-60@2x" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:1 string AppIcon-60@3x" "$APP_PLIST"
+
+          echo "After patch (archive):"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP_PLIST" || true
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
@@ -158,11 +168,11 @@ workflows:
           APP_PLIST=$(find tmp/Payload -name Info.plist | head -n1)
           echo "== CFBundleIconName in IPA =="
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "CFBundleIconName NOT SET"
-          echo "== Icons in bundle (compiled names can vary) =="
+          echo "== CFBundleIcons in IPA =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP_PLIST" || echo "CFBundleIcons NOT SET"
+          echo "== Icons in bundle (kan være komprimeret i Assets.car; det er OK) =="
           find tmp/Payload -type f -iname "*AppIcon*.png" -print || true
-          find tmp/Payload -type f -iname "*60x60*.png" -print || true
           find tmp/Payload -type f -iname "*60@2x*.png" -print || true
-          # NB: Nogle ikoner ligger i Assets.car; det er OK. Apple finder dem via CFBundleIconName.
 
       - name: Upload to TestFlight
         script: |
