@@ -16,7 +16,7 @@ workflows:
         script: |
           set -euxo pipefail
           brew install xcodegen
-          pip3 install --upgrade codemagic-cli-tools imagemagick
+          pip3 install --upgrade codemagic-cli-tools
 
       - name: Regenerate project
         script: |
