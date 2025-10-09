@@ -1,3 +1,7 @@
+name: SmartKurv
+options:
+  minimumXcodeGenVersion: 2.37.0
+
 targets:
   SmartKurv:
     type: application
@@ -18,7 +22,7 @@ targets:
           - SmartKurvApp.swift
 
     resources:
-      - path: Assets.xcassets              # ✅ Peg specifikt her
+      - path: Assets.xcassets
         optional: false
       - LaunchScreen.storyboard
       - path: Resources
@@ -36,8 +40,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.youssef19900.SmartKurv
         DEVELOPMENT_TEAM: GUYJ52Y55V
         CODE_SIGN_STYLE: Manual
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon   # ✅ sikrer ikonvalg
-        INFOPLIST_KEY_CFBundleIconName: AppIcon       # ✅ sikrer plist har AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleIconName: AppIcon
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         SWIFT_VERSION: 5.0
         TARGETED_DEVICE_FAMILY: "1"
