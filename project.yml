@@ -9,7 +9,7 @@ targets:
     deploymentTarget: "16.0"
 
     sources:
-      - path: Smartkurv          # AppState, Models, PricingService, CatalogService
+      - path: SmartKurv          # AppState, Models, PricingService, CatalogService
         optional: false
       - path: UI                 # RootView, Tabs, UI-komponenter
         optional: false
