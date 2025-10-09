@@ -3,11 +3,8 @@ workflows:
     name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
-      ios_signing:
-        provisioning_profiles:
-          - SmartKurv_AppStore.mobileprovision
       groups:
-        - smartkurv
+        - smartkurv   # Skal indeholde dine certifikater og API-nøgler
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
