@@ -3,8 +3,11 @@ workflows:
     name: SmartKurv iOS (TestFlight)
     environment:
       xcode: latest
+      ios_signing:
+        provisioning_profiles:
+          - SmartKurv_AppStore.mobileprovision
       groups:
-        - smartkurv   # Skal indeholde dine certifikater og API-nøgler
+        - smartkurv
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -15,115 +18,151 @@ workflows:
       - name: Install tools
         script: |
           set -euxo pipefail
-          brew install xcodegen
+          brew update
+          brew install xcodegen tree || true
           pip3 install --upgrade codemagic-cli-tools
 
-      - name: Regenerate project
+      - name: Regenerate project (fresh)
         script: |
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      - name: Check assets
+      - name: Quick sanity (assets + build settings)
         script: |
           set -euxo pipefail
-          echo "== Assets folder =="
-          ls -la Assets.xcassets || true
           echo "== AppIcon set =="
-          ls -la "$ICON_SET_PATH" || true
+          ls -la "$ICON_SET_PATH"
           echo "Contents.json:"
-          cat "$ICON_SET_PATH/Contents.json" || true
+          cat "$ICON_SET_PATH/Contents.json"
+          echo "== Build settings (excerpt) =="
+          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
+            grep -Ei 'ASSETCATALOG|ICON|INFOPLIST_FILE|PRODUCT_BUNDLE_IDENTIFIER' || true
 
       - name: Validate AppIcon sizes
         script: |
           set -euxo pipefail
           cd "$ICON_SET_PATH"
           for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
-            test -f "$f" || { echo "❌ Mangler $f"; exit 1; }
+            test -f "$f" || { echo "Mangler $f"; exit 1; }
           done
-          echo "✅ AppIcons findes alle."
+          W2=$(sips -g pixelWidth  AppIcon-60@2x.png | awk '/pixelWidth/ {print $2}')
+          H2=$(sips -g pixelHeight AppIcon-60@2x.png | awk '/pixelHeight/ {print $2}')
+          W3=$(sips -g pixelWidth  AppIcon-60@3x.png | awk '/pixelWidth/ {print $2}')
+          H3=$(sips -g pixelHeight AppIcon-60@3x.png | awk '/pixelHeight/ {print $2}')
+          WM=$(sips -g pixelWidth  AppIcon-1024.png  | awk '/pixelWidth/ {print $2}')
+          HM=$(sips -g pixelHeight AppIcon-1024.png  | awk '/pixelHeight/ {print $2}')
+          [ "$W2" = "120" ] && [ "$H2" = "120" ] || { echo "AppIcon-60@2x.png skal være 120x120"; exit 1; }
+          [ "$W3" = "180" ] && [ "$H3" = "180" ] || { echo "AppIcon-60@3x.png skal være 180x180"; exit 1; }
+          [ "$WM" = "1024" ] && [ "$HM" = "1024" ] || { echo "AppIcon-1024.png skal være 1024x1024"; exit 1; }
 
-      - name: Force-compile Assets.xcassets (sikrer AppIcon medtages)
-        script: |
-          set -euxo pipefail
-          mkdir -p "$CM_BUILD_DIR/AssetsBuild"
-          xcrun actool \
-            --compile "$CM_BUILD_DIR/AssetsBuild" \
-            --platform iphoneos \
-            --minimum-deployment-target 16.0 \
-            --app-icon AppIcon \
-            Assets.xcassets
-          echo "✅ Assets compiled manually to $CM_BUILD_DIR/AssetsBuild"
-          ls -la "$CM_BUILD_DIR/AssetsBuild" || true
-
-      - name: Import certificate
-        script: |
-          set -euxo pipefail
-          keychain initialize
-          echo "$P12_BASE64" | base64 --decode > "$CM_BUILD_DIR/AppleDistribution.p12"
-          keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
-
-      - name: Restore provisioning profile
-        script: |
-          set -euxo pipefail
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "$PROFILE_BASE64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
-
-      - name: Bump version and plist sanity
+      - name: Ensure CFBundleIconName + version/build i Info.plist
         script: |
           set -euxo pipefail
           PLIST="Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
           BUILD_NUM="$(date +%Y%m%d%H%M)"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
 
-      - name: Build archive
+      - name: Import .p12 certificate
         script: |
           set -euxo pipefail
+          keychain initialize
+          echo "$P12_BASE64" | base64 --decode > "$CM_BUILD_DIR/AppleDistribution.p12"
+          keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
+          security find-identity -p codesigning -v || true
+
+      - name: Restore provisioning profile
+        script: |
+          set -euxo pipefail
+          STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$STD_DIR"
+          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
+          test -s "$PROFILE_STD"
+
+      - name: Detect profile name (App Store) and export env
+        script: |
+          set -euxo pipefail
+          STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
+          /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
+          PROFILE_APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST" || true)
+          BUNDLE_IN_PROFILE=${PROFILE_APPID#*.}
+          echo "Profile name: $PROFILE_NAME"
+          echo "Bundle in profile: $BUNDLE_IN_PROFILE"
+          if [ "$BUNDLE_IN_PROFILE" != "$APP_BUNDLE_ID" ]; then
+            echo "❌ Provisioning profile bundle id matcher ikke $APP_BUNDLE_ID"; exit 1;
+          fi
+          echo "export PROFILE_NAME=\"$PROFILE_NAME\"" >> $CM_ENV
+
+      - name: Build archive (codesigned)
+        script: |
+          set -euxo pipefail
+          : "${PROFILE_NAME:?PROFILE_NAME is not set}"
           xcodebuild \
             -project SmartKurv.xcodeproj \
             -scheme SmartKurv \
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -sdk iphoneos \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             archive
 
-      - name: Inspect archive
+      - name: Inspect Assets.car for icons (debug only)
         script: |
           set -euxo pipefail
           APP_PATH="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
-          echo "== App contents =="
-          ls -la "$APP_PATH" || true
           if [ -f "$APP_PATH/Assets.car" ]; then
-            echo "✅ Assets.car findes!"
+            echo "Assets.car found:"
+            ls -la "$APP_PATH/Assets.car"
+            /usr/bin/assetutil --info "$APP_PATH/Assets.car" | head -n 100 || true
           else
-            echo "❌ Assets.car mangler - tjek assets-path i project.yml"
+            echo "⚠️ Ingen Assets.car i appen – tjek at Assets.xcassets blev inkluderet."
+            ls -la "$APP_PATH" || true
           fi
 
-      - name: Export ipa
+      - name: Write exportOptions.plist
         script: |
           set -euxo pipefail
-          xcodebuild -exportArchive \
-            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
-            -exportPath "$CM_BUILD_DIR/exported" \
-            -exportOptionsPlist <(cat << PLIST
+          cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store</string>
             <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$APP_BUNDLE_ID</key>
+              <string>$PROFILE_NAME</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>compileBitcode</key><false/>
+            <key>destination</key><string>export</string>
           </dict>
           </plist>
-          PLIST)
+          PLIST
+
+      - name: Export .ipa
+        script: |
+          set -euxo pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
+            -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
+            -exportPath "$CM_BUILD_DIR/exported"
 
       - name: Upload to TestFlight
         script: |
