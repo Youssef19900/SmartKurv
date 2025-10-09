@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Grundlæggende metadata -->
+  <!-- Basis -->
   <key>CFBundleName</key>
   <string>SmartKurv</string>
   <key>CFBundleIdentifier</key>
@@ -12,7 +12,7 @@
   <key>CFBundleVersion</key>
   <string>1</string>
 
-  <!-- Launch screen (Storyboard navnet uden .storyboard) -->
+  <!-- Launch screen -->
   <key>UILaunchStoryboardName</key>
   <string>LaunchScreen</string>
 
@@ -42,20 +42,5 @@
   <!-- Ikoner via Asset Catalog -->
   <key>CFBundleIconName</key>
   <string>AppIcon</string>
-
-  <!-- Eksplicit ikon-træ (sikrer altool kan matche 120/180) -->
-  <key>CFBundleIcons</key>
-  <dict>
-    <key>CFBundlePrimaryIcon</key>
-    <dict>
-      <key>CFBundleIconName</key>
-      <string>AppIcon</string>
-      <key>CFBundleIconFiles</key>
-      <array>
-        <string>AppIcon-60@2x</string> <!-- 120x120 -->
-        <string>AppIcon-60@3x</string> <!-- 180x180 -->
-      </array>
-    </dict>
-  </dict>
 </dict>
 </plist>
