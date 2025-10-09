@@ -39,10 +39,10 @@ targets:
 
     settings:
       base:
-        # Sikr at Xcode bruger denne plist (ud over 'info.path' ovenfor)
+        # 🔒 Tving Xcode til at bruge denne Info.plist
         INFOPLIST_FILE: Info.plist
 
-        # App icon setup
+        # 📌 App icon setup
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleIconName: AppIcon
 

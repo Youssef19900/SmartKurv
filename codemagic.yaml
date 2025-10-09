@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # indeholder P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -13,134 +13,143 @@ workflows:
     scripts:
       - name: Install tools
         script: |
-            set -euxo pipefail
-            brew install xcodegen
-            pip3 install --upgrade codemagic-cli-tools
+          set -euxo pipefail
+          brew install xcodegen
+          pip3 install --upgrade codemagic-cli-tools
 
       - name: Regenerate project (fresh)
         script: |
-            set -euxo pipefail
-            rm -rf SmartKurv.xcodeproj
-            xcodegen generate --spec project.yml
+          set -euxo pipefail
+          rm -rf SmartKurv.xcodeproj
+          xcodegen generate --spec project.yml
 
       - name: Import .p12 certificate
         script: |
-            set -euxo pipefail
-            keychain initialize
-            echo "$P12_BASE64" | base64 --decode > "$CM_BUILD_DIR/AppleDistribution.p12"
-            keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
-            security find-identity -p codesigning -v || true
+          set -euxo pipefail
+          keychain initialize
+          echo "$P12_BASE64" | base64 --decode > "$CM_BUILD_DIR/AppleDistribution.p12"
+          keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
+          security find-identity -p codesigning -v || true
 
       - name: Restore provisioning profile (to standard folder)
         script: |
-            set -euxo pipefail
-            STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-            mkdir -p "$STD_DIR"
-            PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
-            echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
-            test -s "$PROFILE_STD"
-            ls -la "$STD_DIR" || true
+          set -euxo pipefail
+          STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$STD_DIR"
+          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
+          test -s "$PROFILE_STD"
+          ls -la "$STD_DIR" || true
 
       - name: Configure signing in Xcode project
         script: |
-            set -euxo pipefail
-            PBX="SmartKurv.xcodeproj/project.pbxproj"
-            # Ensret manuelle settings
-            sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
-            sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
-            sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
-            xcode-project use-profiles --project SmartKurv.xcodeproj
-            xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-              grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
+          set -euxo pipefail
+          PBX="SmartKurv.xcodeproj/project.pbxproj"
+          # Ensret manuelle settings
+          sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
+          xcode-project use-profiles --project SmartKurv.xcodeproj
+          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
+            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
 
-      - name: Bump version & build number
+      # 🔧 Sæt version/build OG tving CFBundleIconName i den plist der indgår i buildet
+      - name: Bump version & build (ensure)
         script: |
-            set -euxo pipefail
-            PLIST="Info.plist"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
-              /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
-            BUILD_NUM="$(date +%Y%m%d%H%M)"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
-              /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-            echo "Version:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
-            echo "Build:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
+          set -euxo pipefail
+          PLIST="Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
+          BUILD_NUM="$(date +%Y%m%d%H%M)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
+          # 👇 vigtig: tving CFBundleIconName
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
+          echo "== Local plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST" || true
 
       - name: Build archive (codesigned)
         script: |
-            set -euxo pipefail
-            xcodebuild \
-              -project SmartKurv.xcodeproj \
-              -scheme SmartKurv \
-              -configuration Release \
-              -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
-              -sdk iphoneos \
-              -allowProvisioningUpdates \
-              CODE_SIGN_IDENTITY="Apple Distribution" \
-              DEVELOPMENT_TEAM="$TEAM_ID" \
-              archive
+          set -euxo pipefail
+          xcodebuild \
+            -project SmartKurv.xcodeproj \
+            -scheme SmartKurv \
+            -configuration Release \
+            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
+            -sdk iphoneos \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            archive
 
-      - name: Verify Info.plist inside archive (version + icon name)
+      # 🔍 Verificér at ARKIVETs Info.plist har CFBundleIconName
+      - name: Verify plist inside archive (version + icon name)
         script: |
-            set -euxo pipefail
-            APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
-            echo "CFBundleShortVersionString:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || echo "N/A")
-            echo "CFBundleVersion:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || echo "N/A")
-            echo "CFBundleIconName:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "NOT SET")
+          set -euxo pipefail
+          APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
+          echo "== Archive plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
+          echo "CFBundleIconName:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "NOT SET")
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
-            set -euxo pipefail
-            PROFILE_STD="$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
-            PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
-            /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
-            PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
-            printf "Using provisioning profile: %s\n" "$PROFILE_NAME"
+          set -euxo pipefail
+          PROFILE_STD="$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
+          PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
+          /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
+          printf "Using provisioning profile: %s\n" "$PROFILE_NAME"
 
-            cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
+          cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
             <dict>
-              <key>method</key><string>app-store</string>
-              <key>teamID</key><string>$TEAM_ID</string>
-              <key>signingStyle</key><string>manual</string>
-              <key>signingCertificate</key><string>Apple Distribution</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                <key>$APP_BUNDLE_ID</key>
-                <string>$PROFILE_NAME</string>
-              </dict>
-              <key>uploadSymbols</key><true/>
-              <key>compileBitcode</key><false/>
-              <key>destination</key><string>export</string>
+              <key>$APP_BUNDLE_ID</key>
+              <string>$PROFILE_NAME</string>
             </dict>
-            </plist>
-            PLIST
+            <key>uploadSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
+          PLIST
 
       - name: Export .ipa
         script: |
-            set -euxo pipefail
-            xcodebuild -exportArchive \
-              -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
-              -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
-              -exportPath "$CM_BUILD_DIR/exported"
+          set -euxo pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
+            -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
+            -exportPath "$CM_BUILD_DIR/exported"
 
+      # 🔍 Verificér at IPA'en indeholder CFBundleIconName og AppIcon-billeder
       - name: Verify icons & CFBundleIconName inside IPA
         script: |
-            set -euxo pipefail
-            mkdir -p tmp && unzip -q "$CM_BUILD_DIR/exported/SmartKurv.ipa" -d tmp
-            APP_PLIST=$(find tmp/Payload -name Info.plist | head -n1)
-            echo "== CFBundleIconName in IPA =="
-            /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "CFBundleIconName NOT SET"
-            echo "== Icons in bundle =="
-            find tmp/Payload -type f \( -iname "*AppIcon*" -o -iname "*60@2x*.png" -o -iname "*120x120*.png" \) -maxdepth 4 -print || true
+          set -euxo pipefail
+          mkdir -p tmp && unzip -q "$CM_BUILD_DIR/exported/SmartKurv.ipa" -d tmp
+          APP_PLIST=$(find tmp/Payload -name Info.plist | head -n1)
+          echo "== CFBundleIconName in IPA =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "CFBundleIconName NOT SET"
+          echo "== Icons in bundle =="
+          find tmp/Payload -type f \( -iname "*AppIcon*" -o -iname "*60@2x*.png" -o -iname "*120x120*.png" \) -maxdepth 4 -print || true
 
       - name: Upload to TestFlight
         script: |
-            set -euxo pipefail
-            app-store-connect publish \
-              --apple-id "$APPLE_APP_ID" \
-              --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
+          set -euxo pipefail
+          app-store-connect publish \
+            --apple-id "$APPLE_APP_ID" \
+            --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
 
     artifacts:
       - "$CM_BUILD_DIR/exported/*.ipa"
