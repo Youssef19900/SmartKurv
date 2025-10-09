@@ -22,7 +22,7 @@ targets:
           - SmartKurvApp.swift
 
     resources:
-      - path: Smartkurv/Assets.xcassets   # <- RIGTIG sti til dine ikoner
+      - Assets.xcassets   # <- RIGTIG sti til dine ikoner
         optional: false
       - LaunchScreen.storyboard
       - path: Resources

@@ -9,7 +9,7 @@ workflows:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
-        ICON_SET_PATH: Smartkurv/Assets.xcassets/AppIcon.appiconset
+        ICON_SET_PATH: Assets.xcassets/AppIcon.appiconset
 
     scripts:
       - name: Install tools
