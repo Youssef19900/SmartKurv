@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -23,6 +23,16 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
+      - name: Quick sanity (assets + build settings)
+        script: |
+          set -euxo pipefail
+          echo "== Assets directory =="
+          ls -la Assets.xcassets || true
+          echo "== AppIcon set =="
+          ls -la Assets.xcassets/AppIcon.appiconset || true
+          echo "Contents.json:"
+          cat Assets.xcassets/AppIcon.appiconset/Contents.json || true
+
       - name: Import .p12 certificate
         script: |
           set -euxo pipefail
@@ -39,22 +49,20 @@ workflows:
           PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
           echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
           test -s "$PROFILE_STD"
-          ls -la "$STD_DIR" || true
 
       - name: Configure signing in Xcode project
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
-          # Ensret manuelle settings
           sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
           xcode-project use-profiles --project SmartKurv.xcodeproj
+          echo "== ICON build settings =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
+            grep -Ei 'ASSETCATALOG|ICON|INFOPLIST_FILE|PRODUCT_BUNDLE_IDENTIFIER' || true
 
-      # 🔧 Sæt version/build OG tving CFBundleIconName i den plist der indgår i buildet
-      - name: Bump version & build (ensure)
+      - name: Bump version & build (ensure) + force CFBundleIconName in local Info.plist
         script: |
           set -euxo pipefail
           PLIST="Info.plist"
@@ -63,7 +71,6 @@ workflows:
           BUILD_NUM="$(date +%Y%m%d%H%M)"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-          # 👇 vigtig: tving CFBundleIconName
           /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
           echo "== Local plist =="
@@ -85,7 +92,6 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      # 🔍 Verificér at ARKIVETs Info.plist har CFBundleIconName
       - name: Verify plist inside archive (version + icon name)
         script: |
           set -euxo pipefail
@@ -94,6 +100,18 @@ workflows:
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
           echo "CFBundleIconName:" $(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "NOT SET")
+
+      - name: 🩹 Patch archive Info.plist if CFBundleIconName missing
+        script: |
+          set -euxo pipefail
+          APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
+          if ! /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" >/dev/null 2>&1; then
+            echo "Patching archive Info.plist: CFBundleIconName -> AppIcon"
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP_PLIST" || \
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP_PLIST" || true
+          fi
+          echo "After patch:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "STILL MISSING"
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
@@ -133,7 +151,6 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      # 🔍 Verificér at IPA'en indeholder CFBundleIconName og AppIcon-billeder
       - name: Verify icons & CFBundleIconName inside IPA
         script: |
           set -euxo pipefail
@@ -141,8 +158,11 @@ workflows:
           APP_PLIST=$(find tmp/Payload -name Info.plist | head -n1)
           echo "== CFBundleIconName in IPA =="
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "CFBundleIconName NOT SET"
-          echo "== Icons in bundle =="
-          find tmp/Payload -type f \( -iname "*AppIcon*" -o -iname "*60@2x*.png" -o -iname "*120x120*.png" \) -maxdepth 4 -print || true
+          echo "== Icons in bundle (compiled names can vary) =="
+          find tmp/Payload -type f -iname "*AppIcon*.png" -print || true
+          find tmp/Payload -type f -iname "*60x60*.png" -print || true
+          find tmp/Payload -type f -iname "*60@2x*.png" -print || true
+          # NB: Nogle ikoner ligger i Assets.car; det er OK. Apple finder dem via CFBundleIconName.
 
       - name: Upload to TestFlight
         script: |
