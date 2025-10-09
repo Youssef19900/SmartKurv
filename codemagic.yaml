@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv   # P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -15,7 +15,7 @@ workflows:
       - name: Install tools
         script: |
           set -euxo pipefail
-          brew install xcodegen
+          brew install xcodegen imagemagick
           pip3 install --upgrade codemagic-cli-tools
 
       - name: Regenerate project (fresh)
@@ -28,7 +28,7 @@ workflows:
         script: |
           set -euxo pipefail
           echo "== Assets directory (root) =="
-          ls -la Smartkurv/Assets.xcassets || true
+          ls -la Assets.xcassets || true
           echo "== AppIcon set =="
           ls -la "$ICON_SET_PATH" || true
           echo "Contents.json:"
@@ -50,20 +50,17 @@ workflows:
           H3=$(sips -g pixelHeight AppIcon-60@3x.png | awk '/pixelHeight/ {print $2}')
           WM=$(sips -g pixelWidth  AppIcon-1024.png  | awk '/pixelWidth/ {print $2}')
           HM=$(sips -g pixelHeight AppIcon-1024.png  | awk '/pixelHeight/ {print $2}')
-          [ "$W2" = "120" ] && [ "$H2" = "120" ] || { echo "AppIcon-60@2x.png skal være 120x120"; exit 1; }
-          [ "$W3" = "180" ] && [ "$H3" = "180" ] || { echo "AppIcon-60@3x.png skal være 180x180"; exit 1; }
+          [ "$W2" = "120" ]  && [ "$H2" = "120" ]  || { echo "AppIcon-60@2x.png skal være 120x120"; exit 1; }
+          [ "$W3" = "180" ]  && [ "$H3" = "180" ]  || { echo "AppIcon-60@3x.png skal være 180x180"; exit 1; }
           [ "$WM" = "1024" ] && [ "$HM" = "1024" ] || { echo "AppIcon-1024.png skal være 1024x1024"; exit 1; }
 
       - name: Remove alpha on 1024 (marketing)
         script: |
           set -euxo pipefail
           cd "$ICON_SET_PATH"
-          HAS_ALPHA=$(sips -g hasAlpha AppIcon-1024.png | awk '/hasAlpha/ {print $2}')
-          if [ "$HAS_ALPHA" = "yes" ]; then
-            brew install imagemagick
+          if [ "$(sips -g hasAlpha AppIcon-1024.png | awk '/hasAlpha/ {print $2}')" = "yes" ]; then
             magick AppIcon-1024.png -background white -alpha remove -alpha off AppIcon-1024.png
             echo "Alpha fjernet fra AppIcon-1024.png"
-            sips -g hasAlpha AppIcon-1024.png
           fi
 
       - name: Import .p12 certificate
@@ -126,9 +123,10 @@ workflows:
             ls -la "$APP_PATH/Assets.car"
             /usr/bin/assetutil --info "$APP_PATH/Assets.car" | head -n 200 || true
           else
-            echo "⚠️ Ingen Assets.car i appen – tjek at project.yml resources peger på 'Smartkurv/Assets.xcassets'."
+            echo "⚠️ Ingen Assets.car i appen – tjek at 'Assets.xcassets' er med i project.yml resources."
             ls -la "$APP_PATH" || true
           fi
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PATH/Info.plist" || true
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
