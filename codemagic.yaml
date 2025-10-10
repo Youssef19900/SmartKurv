@@ -47,30 +47,40 @@ workflows:
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
           JSON="$APPICON_DIR/Contents.json"
           test -s "$JSON"
-          python3 - << 'PY'
-import json, os, sys
-base="Assets.xcassets/AppIcon.appiconset"
-d=json.load(open(os.path.join(base,"Contents.json")))
-missing=[]; has_120=False
-for img in d.get("images", []):
-    fn=img.get("filename"); size=img.get("size"); idiom=img.get("idiom"); scale=img.get("scale")
-    if fn and not os.path.exists(os.path.join(base, fn)):
-        missing.append(fn)
-    if idiom=="iphone" and size=="60x60" and scale=="2x" and fn:
-        has_120=True
-if missing:
-    print("❌ Missing files referenced in Contents.json:", ", ".join(missing)); sys.exit(1)
-if not has_120:
-    print("❌ Contents.json does not reference a 60x60 @2x (120x120) iPhone icon"); sys.exit(1)
-print("✅ Contents.json filenames OK and includes 60x60 @2x entry")
-PY
+
+          python3 - <<'PY'
+          import json, os, sys
+          base = "Assets.xcassets/AppIcon.appiconset"
+          with open(os.path.join(base, "Contents.json")) as f:
+              d = json.load(f)
+          missing = []
+          has_120 = False
+          for img in d.get("images", []):
+              fn   = img.get("filename")
+              size = img.get("size")
+              idiom= img.get("idiom")
+              scale= img.get("scale")
+              if fn and not os.path.exists(os.path.join(base, fn)):
+                  missing.append(fn)
+              if idiom == "iphone" and size == "60x60" and scale == "2x" and fn:
+                  has_120 = True
+          if missing:
+              print("❌ Missing files referenced in Contents.json:", ", ".join(missing))
+              sys.exit(1)
+          if not has_120:
+              print("❌ Contents.json does not reference a 60x60 @2x (120x120) iPhone icon")
+              sys.exit(1)
+          print("✅ Contents.json filenames OK and includes 60x60 @2x entry")
+          PY
 
       # ✳️ Normalisér Contents.json til dine AppIcon-*.png (forudsigeligt build)
       - name: Normalize Contents.json to AppIcon-* filenames
         script: |
           set -euxo pipefail
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
-          cat > "$APPICON_DIR/Contents.json" << 'JSON'
+          mkdir -p "$APPICON_DIR"
+
+          cat > "$APPICON_DIR/Contents.json" <<'JSON'
           {
             "images": [
               { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@2x.png",  "scale": "2x" },
@@ -86,7 +96,8 @@ PY
             "info": { "version": 1, "author": "xcode" }
           }
           JSON
-          echo "✅ Contents.json normalized to AppIcon-*"
+
+          echo "✅ Contents.json normalized"
 
       # ✅ Sikr version/build og CFBundleIconName i kilde-plist
       - name: Bump version & build + ensure CFBundleIconName
@@ -209,7 +220,7 @@ PY
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      # 🔐 Upload til TestFlight (ingen 'login' kommando, brug API-nøgler via flags)
+      # 🔐 Upload til TestFlight (brug API-nøgler via flags)
       - name: Upload to TestFlight
         script: |
           set -euxo pipefail
