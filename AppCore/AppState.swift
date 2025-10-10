@@ -27,7 +27,7 @@ final class AppState: ObservableObject {
     @Published var isFindingCheapest = false
     @Published var errorMessage: String?
 
-    /// Radius for “billigst nær mig” (meter) — gemt til senere udvidelse
+    /// Radius for “billigst nær mig” (meter)
     @Published var cheapestRadiusMeters: Double = 2_000
 
     // MARK: - Lokation
@@ -71,6 +71,8 @@ final class AppState: ObservableObject {
         isOrganic[product.id] = value
     }
 
+    // MARK: - Indkøbsliste-håndtering
+
     func addToList(product: Product, variant: ProductVariant, qty: Int = 1) {
         let resolvedEAN = CatalogService.shared.ean(for: product, variant: variant)
         let finalVariant = ProductVariant(unit: variant.unit, organic: variant.organic, ean: resolvedEAN)
@@ -104,6 +106,18 @@ final class AppState: ObservableObject {
         currentList = ShoppingList()
     }
 
+    // MARK: - Historik summeringer (offline estimat via PricingService)
+
+    /// Estimeret totalpris for en historik-liste (offline)
+    func totalForHistory(_ list: ShoppingList) -> Double {
+        PricingService.shared.estimateListTotalOffline(list: list)
+    }
+
+    /// Estimeret besparelse mellem billig/dyr kæde
+    func savingsForHistory(_ list: ShoppingList) -> Double {
+        PricingService.shared.estimateSavingsOffline(list: list)
+    }
+
     // MARK: - Find billigst
 
     func findCheapest(location: CLLocation?) async {
@@ -117,7 +131,7 @@ final class AppState: ObservableObject {
         errorMessage = nil
         defer { isFindingCheapest = false }
 
-        // 🔧 MATCHER nu PricingService-signaturen uden radius:
+        // Matcher PricingService-signatur
         let res = await PricingService.shared.findCheapest(
             list: currentList,
             location: location
@@ -133,7 +147,7 @@ final class AppState: ObservableObject {
     func findCheapestNearby() async {
         locationManager.requestWhenInUse()
 
-        // Vent kort på en frisk lokation ved kold start
+        // Vent kort på en frisk lokation
         let start = Date()
         while locationManager.lastLocation == nil && Date().timeIntervalSince(start) < 2.5 {
             try? await Task.sleep(nanoseconds: 150_000_000)

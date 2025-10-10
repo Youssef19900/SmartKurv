@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HistoryTab: View {
     @EnvironmentObject var app: AppState
+    @State private var expanded: Set<UUID> = []   // hvilke lister er foldet ud
 
     var body: some View {
         NavigationStack {
@@ -25,25 +26,62 @@ struct HistoryTab: View {
                     List {
                         ForEach(app.history) { list in
                             Section {
-                                ForEach(list.items) { item in
+                                // "Forside" på historik-kortet
+                                Button {
+                                    toggle(list.id)
+                                } label: {
                                     HStack(spacing: 12) {
-                                        Text(item.product.name)
-                                            .font(.headline)
-                                            .foregroundStyle(Theme.text1)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(list.createdAt, style: .date)
+                                                .font(.subheadline)
+                                                .foregroundStyle(Theme.text2)
+
+                                            HStack(spacing: 10) {
+                                                // Estimeret total
+                                                Text(formatKr(app.totalForHistory(list)))
+                                                    .font(.headline)
+                                                    .foregroundStyle(Theme.text1)
+
+                                                // Estimeret besparelse
+                                                let saving = app.savingsForHistory(list)
+                                                if saving > 0.0 {
+                                                    Text("− \(formatKr(saving))")
+                                                        .font(.subheadline.weight(.semibold))
+                                                        .foregroundStyle(Theme.success)
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 4)
+                                                        .background(
+                                                            RoundedRectangle(cornerRadius: 8)
+                                                                .fill(Theme.card)
+                                                        )
+                                                }
+                                            }
+                                        }
                                         Spacer()
-                                        Text("x\(item.qty)")
-                                            .font(.headline)
+
+                                        // Pil op/ned
+                                        Image(systemName: expanded.contains(list.id) ? "chevron.up" : "chevron.down")
+                                            .font(.body.weight(.semibold))
                                             .foregroundStyle(Theme.text2)
                                     }
-                                    .listRowBackground(Theme.card)
+                                    .contentShape(Rectangle())
                                 }
-                            } header: {
-                                HStack {
-                                    Text(list.createdAt, style: .date)
-                                    Spacer()
-                                    Text("\(list.items.count) varer")
+                                .buttonStyle(.plain)
+                                .listRowBackground(Theme.card)
+
+                                // Detaljer (foldes ud)
+                                if expanded.contains(list.id) {
+                                    ForEach(list.items) { item in
+                                        HStack(spacing: 12) {
+                                            Text(item.product.name)
+                                                .foregroundStyle(Theme.text1)
+                                            Spacer()
+                                            Text("x\(item.qty)")
+                                                .foregroundStyle(Theme.text2)
+                                        }
+                                        .listRowBackground(Theme.card)
+                                    }
                                 }
-                                .foregroundStyle(Theme.text2)
                             }
                         }
                     }
@@ -52,17 +90,21 @@ struct HistoryTab: View {
                 }
             }
             .appBackground()
+            .navigationTitle("Historik")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Historik")
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.text1)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private func toggle(_ id: UUID) {
+        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+    }
+
+    private func formatKr(_ value: Double) -> String {
+        String(format: "%.2f kr", value)
     }
 }

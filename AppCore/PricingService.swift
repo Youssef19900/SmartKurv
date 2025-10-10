@@ -2,9 +2,7 @@ import Foundation
 import CoreLocation
 
 // MARK: - Models brugt her
-// Antager at du allerede har disse i Models.swift.
-// Hvis ikke, så afkommentér nedenfor og brug dem.
- /*
+/*
  struct Store: Identifiable, Hashable {
      var id: String
      var name: String
@@ -19,11 +17,10 @@ import CoreLocation
  }
  */
 
-// Observations gemmes i cache/hukommelse
 private struct PriceObservation: Codable {
     let ean: String
     let storeId: String
-    let unitPrice: Double    // inkl. kampagne udjævnet til stykpris
+    let unitPrice: Double
     let deposit: Double
     let timestamp: Date
 }
@@ -33,11 +30,9 @@ final class PricingService {
     private init() {}
 
     // MARK: – Konfig
-    var apiTokenProvider: () -> String = { "" } // <-- Sæt via AppState/Keychain
-    /// Hvor langt vi søger (meter)
+    var apiTokenProvider: () -> String = { "" }
     var defaultRadius: Double = 2_000
 
-    // Session med kortere timeouts (vi spørger mange butikker hurtigt)
     private lazy var session: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = 6
@@ -45,11 +40,10 @@ final class PricingService {
         return URLSession(configuration: cfg)
     }()
 
-    // in-memory cache (nulstilles ved app-genstart)
-    private var cache: [String: PriceObservation] = [:] // key = "\(ean)|\(storeId)"
+    private var cache: [String: PriceObservation] = [:]
 
-    // fallback “prisniveau” pr. kæde
-    private func chainFactor(name: String) -> Double {
+    // MARK: - Prisniveau pr. kæde (synlig til estimat)
+    func chainFactor(name: String) -> Double {
         switch name.lowercased() {
         case "netto": return 0.96
         case "rema 1000", "rema1000": return 0.98
@@ -61,24 +55,17 @@ final class PricingService {
 
     // MARK: – Offentlig API
 
-    /// Hovedfunktion: find billigste butikker for en *hel liste* inden for radius fra brugerens lokation.
-    /// Returnerer de 2 billigste totals sorteret stigende.
     func findCheapest(list: ShoppingList, location: CLLocation?, radiusMeters: Double? = nil) async -> [StoreTotal] {
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // lille pause
 
-        // 0) Lille “AI-tænkepause” (føles naturligt at den lige beregner)
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // ~1 sek
-
-        // 1) Hent kandidat-butikker og filtrér på radius
         let radius = radiusMeters ?? defaultRadius
         let candidates = nearestStores(around: location, within: radius)
 
-        // 2) Parallel beregning pr. butik (hurtigt)
         var totals: [StoreTotal] = []
         await withTaskGroup(of: StoreTotal?.self) { group in
             for store in candidates {
                 group.addTask { [weak self] in
                     guard let self else { return nil }
-                    // summer alle varer for denne butik
                     var sum = 0.0
                     for item in list.items {
                         let unit = await self.unitPrice(for: item, in: store)
@@ -92,44 +79,36 @@ final class PricingService {
                 if let t = maybe { totals.append(t) }
             }
         }
-
-        // 3) Vælg top-2 billigste
         return totals.sorted { $0.total < $1.total }.prefix(2).map { $0 }
     }
 
-    // MARK: – Enkeltvare: pris (API hvis muligt, ellers heuristik)
+    // MARK: – Enkeltvare-pris
 
     private func unitPrice(for item: ShoppingItem, in store: Store) async -> Double {
-        // 1) EAN fra CatalogService (ean-map.json eller varianten selv)
         let ean = CatalogService.shared.ean(for: item.product, variant: item.variant)
 
-        // 2) Hvis ingen EAN → heuristik * kædefaktor
         guard let ean else {
             let est = heuristicEstimate(product: item.product, variant: item.variant)
             return est * chainFactor(name: store.name)
         }
 
-        // 3) Cache (30 min)
         let key = "\(ean)|\(store.id)"
         if let hit = cache[key], Date().timeIntervalSince(hit.timestamp) < 60 * 30 {
             return hit.unitPrice + hit.deposit
         }
 
-        // 4) Forsøg API
         if let apiPrice = await fetchFromAPI(ean: ean, storeId: store.id) {
             cache[key] = apiPrice
-            // lær af den observerede pris
             updatePrior(product: item.product, variant: item.variant,
                         observed: apiPrice.unitPrice + apiPrice.deposit)
             return apiPrice.unitPrice + apiPrice.deposit
         }
 
-        // 5) Fallback: heuristik * kædefaktor
         let est = heuristicEstimate(product: item.product, variant: item.variant)
         return est * chainFactor(name: store.name)
     }
 
-    // MARK: – Salling API (pris for EAN i butik)
+    // MARK: – Salling API
 
     private func fetchFromAPI(ean: String, storeId: String) async -> PriceObservation? {
         guard let url = buildURL(
@@ -169,7 +148,6 @@ final class PricingService {
             let cQty   = dec.instore?.campaign?.quantity
             let campaignUnit = (cPrice != nil && (cQty ?? 0) > 0) ? (cPrice! / Double(cQty!)) : nil
 
-            // vælg billigste af kampagne vs. normal
             let unit = minOptional(campaignUnit, base) ?? base
             let deposit = dec.instore?.deposit?.price ?? 0.0
 
@@ -196,11 +174,12 @@ final class PricingService {
         }
     }
 
-    // MARK: – “AI”: heuristik + historik (EMA)
+    // MARK: – Heuristik + historik (EMA)
 
-    private var priors: [String: (mean: Double, alpha: Double)] = [:] // (produktId|unit|organic)
+    private var priors: [String: (mean: Double, alpha: Double)] = [:]
 
-    private func heuristicEstimate(product: Product, variant: ProductVariant) -> Double {
+    // GJORT intern så andre metoder kan kalde den
+    func heuristicEstimate(product: Product, variant: ProductVariant) -> Double {
         let base: Double = {
             switch product.id {
             case _ where product.name.localizedCaseInsensitiveContains("banan"):
@@ -249,7 +228,6 @@ final class PricingService {
 
     // MARK: - Butikker & radius
 
-    /// Simpel liste af butikker i DK (demo). Erstat med rigtigt Store-API hvis du har.
     private func knownStores() -> [Store] {
         [
             .init(id: "netto-001", name: "Netto",  lat: 55.6761, lon: 12.5683),
@@ -258,15 +236,51 @@ final class PricingService {
         ]
     }
 
-    /// Filtrér butikker inden for radius fra en lokation (eller alle hvis lokation mangler).
     private func nearestStores(around location: CLLocation?, within radius: Double) -> [Store] {
         let all = knownStores()
-        guard let loc = location else { return all } // ingen GPS → prøv alle vi kender
+        guard let loc = location else { return all }
         return all.filter { store in
             let d = CLLocation(latitude: store.lat, longitude: store.lon)
                 .distance(from: loc)
             return d <= radius
         }
+    }
+
+    // MARK: - Offline estimeringer (til historik-visning)
+
+    /// Simpel enhedspris (offline) uden netværk
+    public func estimateUnitPriceOffline(product: Product, variant: ProductVariant) -> Double {
+        heuristicEstimate(product: product, variant: variant)
+    }
+
+    /// Estimeret total for en hel liste (offline)
+    public func estimateListTotalOffline(list: ShoppingList) -> Double {
+        var sum = 0.0
+        for item in list.items {
+            let u = estimateUnitPriceOffline(product: item.product, variant: item.variant)
+            sum += u * Double(item.qty)
+        }
+        return (sum * 100).rounded() / 100
+    }
+
+    /// Estimeret besparelse: forskel mellem dyr og billig kæde
+    public func estimateSavingsOffline(list: ShoppingList) -> Double {
+        let chains = ["Netto", "Føtex"]
+        guard chains.count >= 2 else { return 0.0 }
+
+        func total(for chain: String) -> Double {
+            var sum = 0.0
+            for item in list.items {
+                let base = heuristicEstimate(product: item.product, variant: item.variant)
+                sum += base * chainFactor(name: chain) * Double(item.qty)
+            }
+            return sum
+        }
+
+        let totals = chains.map { total(for: $0) }
+        guard let minT = totals.min(), let maxT = totals.max() else { return 0.0 }
+        let saving = max(0.0, maxT - minT)
+        return (saving * 100).rounded() / 100
     }
 }
 
