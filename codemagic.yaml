@@ -40,6 +40,54 @@ workflows:
           done
           echo "✅ AppIcon files found"
 
+      # ✅ Valider at Contents.json peger på eksisterende filer + har 60x60 @2x
+      - name: Validate Contents.json filenames
+        script: |
+          set -euxo pipefail
+          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
+          JSON="$APPICON_DIR/Contents.json"
+          test -s "$JSON"
+          python3 - << 'PY'
+import json, os, sys
+base="Assets.xcassets/AppIcon.appiconset"
+d=json.load(open(os.path.join(base,"Contents.json")))
+missing=[]; has_120=False
+for img in d.get("images", []):
+    fn=img.get("filename"); size=img.get("size"); idiom=img.get("idiom"); scale=img.get("scale")
+    if fn and not os.path.exists(os.path.join(base, fn)):
+        missing.append(fn)
+    if idiom=="iphone" and size=="60x60" and scale=="2x" and fn:
+        has_120=True
+if missing:
+    print("❌ Missing files referenced in Contents.json:", ", ".join(missing)); sys.exit(1)
+if not has_120:
+    print("❌ Contents.json does not reference a 60x60 @2x (120x120) iPhone icon"); sys.exit(1)
+print("✅ Contents.json filenames OK and includes 60x60 @2x entry")
+PY
+
+      # ✳️ Normalisér Contents.json til dine AppIcon-*.png (forudsigeligt build)
+      - name: Normalize Contents.json to AppIcon-* filenames
+        script: |
+          set -euxo pipefail
+          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
+          cat > "$APPICON_DIR/Contents.json" << 'JSON'
+          {
+            "images": [
+              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@2x.png",  "scale": "2x" },
+              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@3x.png",  "scale": "3x" },
+              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@2x.png",  "scale": "2x" },
+              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@3x.png",  "scale": "3x" },
+              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@2x.png",  "scale": "2x" },
+              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@3x.png",  "scale": "3x" },
+              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@2x.png",  "scale": "2x" },
+              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@3x.png",  "scale": "3x" },
+              { "size": "1024x1024","idiom": "ios-marketing","filename": "AppIcon-1024.png",   "scale": "1x" }
+            ],
+            "info": { "version": 1, "author": "xcode" }
+          }
+          JSON
+          echo "✅ Contents.json normalized to AppIcon-*"
+
       # ✅ Sikr version/build og CFBundleIconName i kilde-plist
       - name: Bump version & build + ensure CFBundleIconName
         script: |
@@ -104,9 +152,11 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
+            ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS=YES \
+            GENERATE_INFOPLIST_FILE=NO \
             archive
 
-      # 🔍 Verificér at arkivet har CFBundleIconName og AppIcon-filer
+      # 🔍 Verificér at arkivet har CFBundleIconName, og at asset-kataloget blev samlet
       - name: Verify plist & icons inside archive
         script: |
           set -euxo pipefail
@@ -115,9 +165,11 @@ workflows:
           echo "== Archive plist =="
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || (echo "❌ Missing CFBundleIconName in archive!" && exit 1)
-          echo "== App bundle (looking for AppIcon) =="
-          ls -la "$APP_DIR" | grep -i appicon || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" >/dev/null 2>&1 || { echo "❌ Missing CFBundleIconName in archive!"; exit 1; }
+          echo "✅ CFBundleIconName is present in archive"
+          echo "== Check Assets.car present =="
+          test -f "$APP_DIR/Assets.car" || { echo "❌ Assets.car missing, asset catalog not compiled into app"; exit 1; }
+          echo "✅ Assets.car present"
 
       - name: Detect profile name & Write exportOptions.plist
         script: |
@@ -157,7 +209,7 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      # 🔐 Upload til TestFlight med eksplicitte API-nøgler (ingen 'login' kommando)
+      # 🔐 Upload til TestFlight (ingen 'login' kommando, brug API-nøgler via flags)
       - name: Upload to TestFlight
         script: |
           set -euxo pipefail
