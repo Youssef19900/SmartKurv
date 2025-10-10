@@ -9,20 +9,35 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
 
+            // SØG
             NavigationStack { SearchTab() }
                 .tabItem { Label("Søg", systemImage: "magnifyingglass") }
                 .tag(Tab.search)
 
+            // INDKØB
             NavigationStack { ShoppingListTab() }
                 .tabItem { Label("Indkøb", systemImage: "cart") }
-                .badge(app.currentList.items.isEmpty ? nil : app.currentList.items.reduce(0){$0+$1.qty})
+                .badgeIf(app.currentList.items.reduce(0) { $0 + $1.qty }) // ← kun badge hvis > 0
                 .tag(Tab.shopping)
 
+            // HISTORIK
             NavigationStack { HistoryTab() }
                 .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
                 .tag(Tab.history)
         }
-        .tint(.systemBlue)
-        .background(Color(.systemBackground))
+        .tint(Theme.accent) // eller Color(.systemBlue)
+        .background(Theme.bgGradient.ignoresSafeArea())
+    }
+}
+
+// Kun vis badge når count > 0
+private extension View {
+    @ViewBuilder
+    func badgeIf(_ count: Int) -> some View {
+        if count > 0 {
+            self.badge(count)
+        } else {
+            self
+        }
     }
 }
