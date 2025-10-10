@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv
+        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -32,13 +32,13 @@ workflows:
           ls -la "$APPICON_DIR"
           for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
             if [ ! -f "$APPICON_DIR/$f" ]; then
-              echo "Missing $f in AppIcon.appiconset"
+              echo "❌ Missing $f in AppIcon.appiconset"
               exit 1
             fi
           done
-          echo "AppIcon files found"
+          echo "✅ AppIcon files found"
 
-      - name: "Normalize Contents json to AppIcon filenames"
+      - name: "Normalize Contents.json to AppIcon filenames"
         script: |
           set -euxo pipefail
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
@@ -59,9 +59,9 @@ workflows:
             "info": { "version": 1, "author": "xcode" }
           }
           JSON
-          echo "Contents.json normalized"
+          echo "✅ Contents.json normalized"
 
-      - name: "Validate Contents json filenames"
+      - name: "Validate Contents.json filenames"
         script: |
           set -euxo pipefail
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
@@ -75,29 +75,40 @@ workflows:
           missing = []
           has_120 = False
           for img in d.get("images", []):
-              fn = img.get("filename")
-              idiom = img.get("idiom")
+              fn   = img.get("filename")
               size = img.get("size")
-              scale = img.get("scale")
+              idiom= img.get("idiom")
+              scale= img.get("scale")
               if fn and not os.path.exists(os.path.join(base, fn)):
                   missing.append(fn)
               if idiom == "iphone" and size == "60x60" and scale == "2x" and fn:
                   has_120 = True
           if missing:
-              print("Missing files in Contents.json:", ", ".join(missing)); sys.exit(1)
+              print("❌ Missing files referenced in Contents.json:", ", ".join(missing)); sys.exit(1)
           if not has_120:
-              print("Missing 60x60 @2x iPhone icon reference"); sys.exit(1)
-          print("Contents.json looks OK")
+              print("❌ Contents.json does not reference a 60x60 @2x iPhone icon (120x120)"); sys.exit(1)
+          print("✅ Contents.json OK og refererer 60x60@2x")
           PY
 
-      - name: "Bump version and ensure CFBundleIconName"
+      - name: "Bump version and ensure CFBundleIcons mapping"
         script: |
           set -euxo pipefail
           PLIST="Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
+          # Version / build
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
           BUILD_NUM="$(date +%Y%m%d%H%M)"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
+          # Ryd gammel top-level nøgle (ikke nødvendig, men pænt)
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$PLIST" || true
+          # ✅ iOS 11+: CFBundleIcons → CFBundlePrimaryIcon → CFBundleIconName = "AppIcon"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName AppIcon" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName string AppIcon" "$PLIST"
+          echo "== Local plist check =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName" "$PLIST"
 
       - name: "Import p12 certificate"
         script: |
@@ -125,7 +136,8 @@ workflows:
           sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
           xcode-project use-profiles --project SmartKurv.xcodeproj
-          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
+          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
+            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
 
       - name: "Build archive"
         script: |
@@ -150,26 +162,32 @@ workflows:
           set -euxo pipefail
           APP_DIR="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
           if [ ! -f "$APP_DIR/Assets.car" ]; then
-            echo "Assets.car missing -> compiling Assets.xcassets into app"
+            echo "⚠️  Assets.car missing -> compiling Assets.xcassets into app"
             xcrun actool \
               --compile "$APP_DIR" \
               --platform iphoneos \
+              --target-device iphone \
               --minimum-deployment-target 16.0 \
               --app-icon AppIcon \
               --output-partial-info-plist "$CM_BUILD_DIR/asset-info.plist" \
               Assets.xcassets
             ls -la "$APP_DIR/Assets.car"
           else
-            echo "Assets.car already present"
+            echo "✅ Assets.car already present"
           fi
 
-      - name: "Verify archive icons"
+      - name: "Verify plist & icons inside archive"
         script: |
           set -euxo pipefail
           APP_DIR="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
           APP_PLIST="$APP_DIR/Info.plist"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" >/dev/null 2>&1 || { echo "Missing CFBundleIconName in archive"; exit 1; }
-          test -f "$APP_DIR/Assets.car" || { echo "Assets.car still missing"; exit 1; }
+          echo "== Archive plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName" "$APP_PLIST" >/dev/null 2>&1 \
+            || { echo "❌ Missing CFBundleIcons/CFBundlePrimaryIcon/CFBundleIconName in archive"; exit 1; }
+          test -f "$APP_DIR/Assets.car" || { echo "❌ Assets.car missing"; exit 1; }
+          echo "✅ CFBundleIcons mapping OK og Assets.car findes"
 
       - name: "Write exportOptions plist"
         script: |
@@ -211,7 +229,7 @@ workflows:
         script: |
           set -euxo pipefail
           IPA="$CM_BUILD_DIR/exported/SmartKurv.ipa"
-          test -s "$IPA" || { echo "IPA not found"; exit 1; }
+          test -s "$IPA" || { echo "❌ IPA not found"; exit 1; }
           app-store-connect publish \
             --apple-id "$APPLE_APP_ID" \
             --path "$IPA" \
