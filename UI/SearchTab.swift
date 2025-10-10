@@ -106,7 +106,7 @@ struct SearchTab: View {
         .navigationTitle("Søg")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 CartBadgeButton()
             }
         }
