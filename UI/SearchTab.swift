@@ -1,5 +1,14 @@
 import SwiftUI
 
+// Lille, genbrugelig toolbar for at undgå overload-ambiguity
+struct TrailingCartToolbar: ToolbarContent {
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            CartBadgeButton()
+        }
+    }
+}
+
 struct SearchTab: View {
     @EnvironmentObject var app: AppState
     @State private var suggestions: [String] = []
@@ -12,7 +21,7 @@ struct SearchTab: View {
 
                 VStack(alignment: .leading, spacing: 12) {
 
-                    // SØGEFELT HELT I TOPPEN
+                    // SØGEFELT
                     ZStack(alignment: .topLeading) {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
@@ -45,9 +54,12 @@ struct SearchTab: View {
                             }
                         }
                         .padding(14)
-                        .background(
+                        .background( // korrekt baggrund + kant
+                            Theme.card,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Theme.card)
                                 .stroke(Theme.divider)
                         )
                         .padding(.horizontal, 16)
@@ -78,8 +90,11 @@ struct SearchTab: View {
                                 }
                             }
                             .background(
+                                Theme.card,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.card)
                                     .stroke(Theme.divider)
                             )
                             .padding(.horizontal, 24)
@@ -121,11 +136,7 @@ struct SearchTab: View {
             }
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
-                }
-            }
+            .toolbar { TrailingCartToolbar() } // entydigt toolbar-overload
         }
     }
 
