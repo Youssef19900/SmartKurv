@@ -40,30 +40,6 @@ workflows:
           done
           echo "✅ AppIcon files found"
 
-      # ✳️ Skriv korrekt Contents.json (matcher dine AppIcon-*.png)
-      - name: Normalize Contents.json to AppIcon-* filenames
-        script: |
-          set -euxo pipefail
-          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
-          mkdir -p "$APPICON_DIR"
-          cat > "$APPICON_DIR/Contents.json" <<'JSON'
-          {
-            "images": [
-              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@2x.png",  "scale": "2x" },
-              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@3x.png",  "scale": "3x" },
-              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@2x.png",  "scale": "2x" },
-              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@3x.png",  "scale": "3x" },
-              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@2x.png",  "scale": "2x" },
-              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@3x.png",  "scale": "3x" },
-              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@2x.png",  "scale": "2x" },
-              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@3x.png",  "scale": "3x" },
-              { "size": "1024x1024","idiom": "ios-marketing","filename": "AppIcon-1024.png",   "scale": "1x" }
-            ],
-            "info": { "version": 1, "author": "xcode" }
-          }
-          JSON
-          echo "✅ Contents.json normalized to AppIcon-*"
-
       # ✔️ Valider at JSON'en matcher faktiske filer + at 60x60@2x findes
       - name: Validate Contents.json filenames
         script: |
@@ -165,7 +141,7 @@ workflows:
             archive
 
       # 🧯 Fallback: generér Assets.car hvis Xcode ikke tog assets med
-      - name: Fallback: compile asset catalog into archive if missing
+      - name: "Fallback - compile asset catalog into archive if missing"
         script: |
           set -euxo pipefail
           APP_DIR="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
