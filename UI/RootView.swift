@@ -1,6 +1,9 @@
+import SwiftUI
+
 struct RootView: View {
     @EnvironmentObject var app: AppState
     @State private var tab: Tab = .search
+
     enum Tab: Hashable { case search, shopping, history }
 
     var body: some View {
@@ -19,6 +22,6 @@ struct RootView: View {
                 .tag(Tab.history)
         }
         .tint(.systemBlue)
-        .appBackground()              // solid white, respects safe areas
+        .appBackground()
     }
 }

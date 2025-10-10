@@ -2,7 +2,10 @@ import SwiftUI
 
 @main
 struct SmartKurvApp: App {
+    @StateObject private var app = AppState()
+
     init() {
+        // Opaque bars (optional, from earlier)
         let nav = UINavigationBarAppearance()
         nav.configureWithOpaqueBackground()
         nav.backgroundColor = .white
@@ -11,21 +14,21 @@ struct SmartKurvApp: App {
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
-        UINavigationBar.appearance().tintColor = .blue     // bar button/tint
+        UINavigationBar.appearance().tintColor = .blue
 
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()
         tab.backgroundColor = .white
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
-        UITabBar.appearance().tintColor = .blue            // active tab color
+        UITabBar.appearance().tintColor = .blue
         UITabBar.appearance().unselectedItemTintColor = .gray
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environmentObject(AppState())
+                .environmentObject(app)   // ✅ inject once here
         }
     }
 }
