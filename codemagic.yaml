@@ -4,7 +4,7 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        - smartkurv
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
@@ -23,7 +23,6 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      # 🔎 Fail tidligt hvis AppIcon-sættet mangler
       - name: Verify AppIcon presence
         script: |
           set -euxo pipefail
@@ -31,7 +30,6 @@ workflows:
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
           test -d "$APPICON_DIR"
           ls -la "$APPICON_DIR"
-          # Tjek vigtige filer (matcher dine faktiske filnavne)
           for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
             if [ ! -f "$APPICON_DIR/$f" ]; then
               echo "❌ Missing $f in AppIcon.appiconset"
@@ -40,14 +38,37 @@ workflows:
           done
           echo "✅ AppIcon files found"
 
-      # ✅ Valider at Contents.json peger på eksisterende filer + har 60x60 @2x
+      # ⬅️ Flyttet op: skriv korrekt Contents.json FØR validering
+      - name: Normalize Contents.json to AppIcon-* filenames
+        script: |
+          set -euxo pipefail
+          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
+          mkdir -p "$APPICON_DIR"
+          cat > "$APPICON_DIR/Contents.json" <<'JSON'
+          {
+            "images": [
+              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@2x.png",  "scale": "2x" },
+              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@3x.png",  "scale": "3x" },
+              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@2x.png",  "scale": "2x" },
+              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@3x.png",  "scale": "3x" },
+              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@2x.png",  "scale": "2x" },
+              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@3x.png",  "scale": "3x" },
+              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@2x.png",  "scale": "2x" },
+              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@3x.png",  "scale": "3x" },
+              { "size": "1024x1024","idiom": "ios-marketing","filename": "AppIcon-1024.png",   "scale": "1x" }
+            ],
+            "info": { "version": 1, "author": "xcode" }
+          }
+          JSON
+          echo "✅ Contents.json normalized to AppIcon-*"
+
+      # ✔️ Nu validerer vi at JSON'en matcher faktiske filer (ingen navn-mismatch mere)
       - name: Validate Contents.json filenames
         script: |
           set -euxo pipefail
           APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
           JSON="$APPICON_DIR/Contents.json"
           test -s "$JSON"
-
           python3 - <<'PY'
           import json, os, sys
           base = "Assets.xcassets/AppIcon.appiconset"
@@ -73,33 +94,6 @@ workflows:
           print("✅ Contents.json filenames OK and includes 60x60 @2x entry")
           PY
 
-      # ✳️ Normalisér Contents.json til dine AppIcon-*.png (forudsigeligt build)
-      - name: Normalize Contents.json to AppIcon-* filenames
-        script: |
-          set -euxo pipefail
-          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
-          mkdir -p "$APPICON_DIR"
-
-          cat > "$APPICON_DIR/Contents.json" <<'JSON'
-          {
-            "images": [
-              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@2x.png",  "scale": "2x" },
-              { "size": "20x20",   "idiom": "iphone",        "filename": "AppIcon-20@3x.png",  "scale": "3x" },
-              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@2x.png",  "scale": "2x" },
-              { "size": "29x29",   "idiom": "iphone",        "filename": "AppIcon-29@3x.png",  "scale": "3x" },
-              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@2x.png",  "scale": "2x" },
-              { "size": "40x40",   "idiom": "iphone",        "filename": "AppIcon-40@3x.png",  "scale": "3x" },
-              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@2x.png",  "scale": "2x" },
-              { "size": "60x60",   "idiom": "iphone",        "filename": "AppIcon-60@3x.png",  "scale": "3x" },
-              { "size": "1024x1024","idiom": "ios-marketing","filename": "AppIcon-1024.png",   "scale": "1x" }
-            ],
-            "info": { "version": 1, "author": "xcode" }
-          }
-          JSON
-
-          echo "✅ Contents.json normalized"
-
-      # ✅ Sikr version/build og CFBundleIconName i kilde-plist
       - name: Bump version & build + ensure CFBundleIconName
         script: |
           set -euxo pipefail
@@ -139,7 +133,6 @@ workflows:
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
-          # Gør klar til manuel signering + ryd spor
           sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
@@ -167,7 +160,6 @@ workflows:
             GENERATE_INFOPLIST_FILE=NO \
             archive
 
-      # 🔍 Verificér at arkivet har CFBundleIconName, og at asset-kataloget blev samlet
       - name: Verify plist & icons inside archive
         script: |
           set -euxo pipefail
@@ -220,7 +212,6 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      # 🔐 Upload til TestFlight (brug API-nøgler via flags)
       - name: Upload to TestFlight
         script: |
           set -euxo pipefail
