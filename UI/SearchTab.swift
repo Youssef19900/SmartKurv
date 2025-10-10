@@ -147,17 +147,21 @@ struct SearchTab: View {
                 .scrollContentBackground(.hidden) // mørk baggrund
             }
             .appBackground()
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Søg")
-                        .font(.title2.bold())             // mindre end default kæmpe-titel
-                        .foregroundStyle(Theme.text1)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()                    // badge-knap
-                }
-            }
+            .toolbar(content: { searchToolbar })   // <- entydig overload
             .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    // Entydig ToolbarContent (undgår ambiguous overload)
+    @ToolbarContentBuilder
+    private var searchToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Text("Søg")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.text1)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            CartBadgeButton()
         }
     }
 

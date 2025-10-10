@@ -10,19 +10,15 @@ final class LocationManager: NSObject, ObservableObject {
     @Published var status: CLAuthorizationStatus = .notDetermined
     @Published var errorMessage: String?
 
-    /// Giver nem adgang til den seneste position (eller nil)
-    var location: CLLocation? {
-        lastLocation
-    }
+    var location: CLLocation? { lastLocation }
 
     override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        manager.distanceFilter = 50  // opdater kun hvis man bevæger sig lidt
+        manager.distanceFilter = 50
     }
 
-    /// Bed brugeren om tilladelse hvis nødvendigt
     func requestWhenInUse() {
         if status == .notDetermined {
             manager.requestWhenInUseAuthorization()
@@ -33,31 +29,44 @@ final class LocationManager: NSObject, ObservableObject {
         }
     }
 
-    /// Opdatér positionen manuelt (bruges i AppState.findCheapestNearby)
     func refreshLocation() {
         manager.requestLocation()
     }
 }
 
-// MARK: - Delegate
+// MARK: - Delegate (nonisolated for Swift 6-compat)
 extension LocationManager: CLLocationManagerDelegate {
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        status = manager.authorizationStatus
-        switch status {
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.requestLocation()
-        case .denied, .restricted:
-            errorMessage = "Placering nægtet. Giv adgang under Indstillinger > Privatliv > Placering."
-        default:
-            break
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let auth = manager.authorizationStatus
+        Task { @MainActor in
+            self.status = auth
+            switch auth {
+            case .authorizedWhenInUse, .authorizedAlways:
+                manager.requestLocation()
+            case .denied, .restricted:
+                self.errorMessage = "Placering nægtet. Giv adgang i Indstillinger > Privatliv > Placering."
+            default:
+                break
+            }
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let loc = locations.last else { return }
-        lastLocation = loc
-        errorMessage = nil
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        Task { @MainActor in
+            if let loc = locations.last {
+                self.lastLocation = loc
+                self.errorMessage = nil
+            }
+        }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("📍 Location error:", error.locali
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        // <- her var stavefejlen
+        let msg = error.localizedDescription
+        print("📍 Location error:", msg)
+        Task { @MainActor in
+            self.errorMessage = "Kunne ikke finde din placering: \(msg)"
+        }
+    }
+}

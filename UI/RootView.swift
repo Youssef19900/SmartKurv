@@ -4,47 +4,43 @@ struct RootView: View {
     @EnvironmentObject var app: AppState
     @State private var tab: Tab = .search
 
-    enum Tab: Hashable {
-        case search
-        case shopping
-        case history
-    }
+    enum Tab: Hashable { case search, shopping, history }
 
     var body: some View {
         TabView(selection: $tab) {
 
-            // MARK: - SØG
+            // SØG
             NavigationStack {
                 SearchTab()
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem {
-                Label("Søg", systemImage: "magnifyingglass")
-            }
+            .tabItem { Label("Søg", systemImage: "magnifyingglass") }
             .tag(Tab.search)
 
-            // MARK: - INDKØB
+            // INDKØB
             NavigationStack {
                 ShoppingListTab()
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem {
-                Label("Indkøb", systemImage: "cart")
-            }
-            .badge(app.currentList.items.count > 0 ? app.currentList.items.count : nil) // badge på tab
+            .tabItem { Label("Indkøb", systemImage: "cart") }
+            .badge(tabBadge)  // <— brug explicit optional
             .tag(Tab.shopping)
 
-            // MARK: - HISTORIK
+            // HISTORIK
             NavigationStack {
                 HistoryTab()
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem {
-                Label("Historik", systemImage: "clock.arrow.circlepath")
-            }
+            .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
             .tag(Tab.history)
         }
         .tint(Theme.accent)
         .background(Theme.bgGradient.ignoresSafeArea())
+    }
+
+    // MARK: - Badge helper
+    private var tabBadge: Int? {
+        let c = app.currentList.items.count
+        return c == 0 ? nil : c
     }
 }
