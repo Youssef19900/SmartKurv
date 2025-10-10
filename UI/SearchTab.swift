@@ -3,112 +3,128 @@ import SwiftUI
 struct SearchTab: View {
     @EnvironmentObject var app: AppState
     @State private var suggestions: [String] = []
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .topLeading) {
-                // Indholdet
-                List {
-                    // RESULTATER
-                    if !app.searchResults.isEmpty {
-                        Section("Resultater") {
-                            ForEach(app.searchResults, id: \.id) { product in
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(product.name)
-                                            .font(.body.weight(.medium))
-                                            .foregroundColor(.primary)
-                                        Text(product.variants.first?.displayName ?? "")
-                                            .font(.footnote)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Button {
-                                        let v = app.defaultVariant(for: product)
-                                        app.addToList(product: product, variant: v)
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title3)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .contentShape(Rectangle())
-                            }
+            VStack(alignment: .leading, spacing: 12) {
+
+                // Søgefelt
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Theme.text2)
+
+                    TextField("Søg fx “banan”", text: $app.query)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .font(.body)
+                        .onChange(of: app.query) { newValue in   // <- brug denne signatur
+                            updateSuggestions(for: newValue)
                         }
+                        .onSubmit { app.runSearch() }
+
+                    if !app.query.isEmpty {
+                        Button {
+                            app.query = ""
+                            app.searchResults = []
+                            suggestions = []
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Theme.text2)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .listStyle(.plain)
-                .contentMargins(.top, 64)   // plads til søgefeltet
-                .scrollDismissesKeyboard(.immediately)
+                .padding(14)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
-                // SØGEFELT + DROPDOWN
-                VStack(spacing: 6) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.secondary)
+                // Find billigst (kalder AppState)
+                Button {
+                    Task { await app.findCheapestNearby() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                        Text("Sammenlign priser i nærheden")
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .disabled(app.isFindingCheapest || app.currentList.items.isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
 
-                        TextField("Søg fx “banan”", text: $app.query)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                            .focused($isFocused)
-                            .onChange(of: app.query) { updateSuggestions(for: $0) }
-                            .onSubmit { app.runSearch() }
-
-                        if !app.query.isEmpty {
-                            Button {
-                                app.query = ""
-                                app.searchResults = []
-                                suggestions = []
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.secondary)
+                // Resultater / billigst / forslag
+                List {
+                    if app.isFindingCheapest {
+                        Section {
+                            HStack {
+                                ProgressView("Beregner…")
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
+                        } header: {
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
+                        }
+                    } else if !app.cheapest.isEmpty {
+                        Section {
+                            ForEach(app.cheapest, id: \.storeName) { t in
+                                HStack {
+                                    Text(t.storeName)
+                                    Spacer()
+                                    Text(String(format: "%.2f kr", t.total)).font(.headline)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        } header: {
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
+                        }
+                    } else if let msg = app.errorMessage {
+                        Section {
+                            Text(msg).foregroundStyle(Theme.text2)
+                        } header: {
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
                         }
                     }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(.systemGray6))
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    )
 
-                    // DROPDOWN – vis kun når der er tekst og ingen resultater endnu
-                    if !suggestions.isEmpty {
-                        VStack(alignment: .leading, spacing: 0) {
+                    if !suggestions.isEmpty && app.searchResults.isEmpty {
+                        Section("Forslag") {
                             ForEach(suggestions, id: \.self) { s in
                                 Button {
                                     app.query = s
-                                    isFocused = false
                                     app.runSearch()
-                                    suggestions = []
-                                } label: {
-                                    HStack {
-                                        Text(s)
-                                            .foregroundColor(.primary)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                }
+                                } label: { Text(s) }
                                 .buttonStyle(.plain)
-
-                                if s != suggestions.last {
-                                    Divider()
-                                }
                             }
                         }
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(.systemBackground))
-                                .shadow(radius: 6, y: 2)
-                        )
+                    }
+
+                    Section("Resultater") {
+                        ForEach(app.searchResults, id: \.id) { product in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(product.name).font(.headline)
+                                    Text(product.variants.first?.displayName ?? "")
+                                        .font(.subheadline).foregroundStyle(Theme.text2)
+                                }
+                                Spacer()
+                                Button {
+                                    let v = app.defaultVariant(for: product)
+                                    app.addToList(product: product, variant: v)
+                                } label: {
+                                    Image(systemName: "plus.circle.fill").font(.title3)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .listStyle(.plain)                   // mere kompakt
+                .scrollContentBackground(.hidden)
             }
+            .appBackground()
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -116,7 +132,6 @@ struct SearchTab: View {
                     CartBadgeButton()
                 }
             }
-            .background(Color(.systemBackground))
         }
     }
 
@@ -124,9 +139,7 @@ struct SearchTab: View {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; return }
         let names = CatalogService.shared.all().map(\.name)
-        suggestions = Array(
-            names.filter { $0.localizedCaseInsensitiveContains(t) }
-                 .prefix(8)
-        )
+        suggestions = names.filter { $0.localizedCaseInsensitiveContains(t) }
+                           .prefix(5).map { $0 }
     }
 }
