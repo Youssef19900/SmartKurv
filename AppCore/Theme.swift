@@ -1,30 +1,37 @@
 import SwiftUI
 
 enum Theme {
+    // Lys baggrund
     static let bgGradient = LinearGradient(
-        colors: [
-            Color(red: 0.08, green: 0.09, blue: 0.12),
-            Color(red: 0.05, green: 0.07, blue: 0.10)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
+        colors: [Color.white, Color(white: 0.98)],
+        startPoint: .topLeading, endPoint: .bottomTrailing
     )
-    static let bg: LinearGradient = Theme.bgGradient
+    static let bg: LinearGradient = bgGradient
 
-    static let card    = Color(red: 0.11, green: 0.12, blue: 0.14)
-    static let text1   = Color.white
-    static let text2   = Color(red: 0.74, green: 0.75, blue: 0.77)
+    // Overflader
+    static let card    = Color(white: 0.96)
+    static let divider = Color(white: 0.88)
+
+    // Tekst
+    static let text1   = Color.black
+    static let text2   = Color(white: 0.45)
+
+    // Aksent
     static let accent  = Color(red: 0.05, green: 0.52, blue: 0.98)
     static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
     static let warning = Color(red: 1.00, green: 0.75, blue: 0.15)
-
-    // ➕ ADD THIS:
-    static let divider = Color.white.opacity(0.08)
 }
 
-// Small convenience used in screens
+// Genbrugelige ting
 extension View {
     func appBackground() -> some View {
         background(Theme.bgGradient.ignoresSafeArea())
+    }
+    func cardContainer(corner: CGFloat = 14) -> some View {
+        padding(14)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous).stroke(Theme.divider)
+            )
     }
 }

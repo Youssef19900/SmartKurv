@@ -2,79 +2,90 @@ import SwiftUI
 
 struct ShoppingListTab: View {
     @EnvironmentObject var app: AppState
+    @State private var showCheapest = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if app.currentList.items.isEmpty {
-                    // TOM-STATE
-                    VStack(spacing: 12) {
-                        Image(systemName: "cart")
-                            .font(.system(size: 44, weight: .regular))
-                            .foregroundStyle(Theme.text2)
-                        Text("Din indkøbsliste er tom")
+            VStack(spacing: 12) {
+
+                // Find billigst-knap
+                Button {
+                    Task {
+                        await app.findCheapestNearby()
+                        // Vis resultat kort, og flyt derefter listen til historik
+                        showCheapest = true
+                        app.commitCurrentListToHistory()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                        Text("Find billigst inden for 2 km")
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .disabled(app.isFindingCheapest || app.currentList.items.isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                // Resultatvisning (når vi lige har beregnet)
+                if app.isFindingCheapest {
+                    ProgressView("Beregner…")
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if showCheapest && !app.cheapest.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Billigst i nærheden")
                             .font(.headline)
                             .foregroundStyle(Theme.text2)
-                        Text("Søg efter varer og tilføj dem til listen.")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.text2.opacity(0.8))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    // LISTE
-                    List {
-                        Section {
-                            ForEach(app.currentList.items) { item in
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.product.name)
-                                            .font(.headline)
-                                            .foregroundStyle(Theme.text1)
-                                        // evt. ekstra info (variant mm.)
-                                        // Text(item.product.variants.first?.displayName ?? "")
-                                        //     .font(.subheadline)
-                                        //     .foregroundStyle(Theme.text2)
-                                    }
-                                    Spacer()
-                                    Text("x\(item.qty)")
-                                        .font(.headline)
-                                        .foregroundStyle(Theme.text2)
-                                }
-                                .listRowBackground(Theme.card)
-                                // Swipe-to-delete (afkommentér, hvis du har denne metode)
-                                //.swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                //    Button(role: .destructive) {
-                                //        app.remove(item)
-                                //    } label: {
-                                //        Label("Slet", systemImage: "trash")
-                                //    }
-                                //}
-                            }
-                        } header: {
+                        ForEach(app.cheapest, id: \.storeName) { t in
                             HStack {
-                                Text("Din liste")
+                                Text(t.storeName).foregroundStyle(Theme.text1)
                                 Spacer()
-                                Text("\(app.currentList.items.count) varer")
+                                Text(String(format: "%.2f kr", t.total))
+                                    .font(.headline)
                             }
-                            .foregroundStyle(Theme.text2)
+                            .cardContainer()
                         }
                     }
-                    .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 16)
+                } else if let msg = app.errorMessage {
+                    Text(msg).foregroundStyle(Theme.text2)
+                        .padding(.horizontal, 16)
                 }
+
+                // Selve listen
+                List {
+                    Section {
+                        ForEach(app.currentList.items) { item in
+                            HStack {
+                                Text(item.product.name).foregroundStyle(Theme.text1)
+                                Spacer()
+                                Text("x\(item.qty)").foregroundStyle(Theme.text2)
+                            }
+                            .listRowBackground(Theme.card)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Din liste")
+                            Spacer()
+                            Text("\(app.currentList.items.count) varer")
+                        }
+                        .foregroundStyle(Theme.text2)
+                    }
+                }
+                .listStyle(.plain) // tættere layout
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("Indkøb")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { CartBadgeButton() }
             }
             .appBackground()
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Indkøb")
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.text1)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
