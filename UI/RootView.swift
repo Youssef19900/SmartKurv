@@ -23,7 +23,7 @@ struct RootView: View {
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem { Label("Indkøb", systemImage: "cart") }
-            .badgeIf(app.currentList.items.count)   // <- kun badge når > 0
+            .badgeIf(app.cartItemCount)   // kun badge når > 0
             .tag(Tab.shopping)
 
             // HISTORIK
@@ -39,14 +39,14 @@ struct RootView: View {
     }
 }
 
-// Viser kun badge hvis count > 0
+// Kun vis badge hvis count > 0 (undgår Int? overload-issues)
 private extension View {
     @ViewBuilder
     func badgeIf(_ count: Int) -> some View {
         if count > 0 {
-            self.badge(count)
+            self.badge(count)          // bruger .badge(Int)
         } else {
-            self
+            self                       // ingen badge
         }
     }
 }

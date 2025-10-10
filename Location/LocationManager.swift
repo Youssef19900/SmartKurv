@@ -10,6 +10,7 @@ final class LocationManager: NSObject, ObservableObject {
     @Published var status: CLAuthorizationStatus = .notDetermined
     @Published var errorMessage: String?
 
+    /// Seneste kendte lokation (bekvemmelig alias)
     var location: CLLocation? { lastLocation }
 
     override init() {
@@ -19,22 +20,27 @@ final class LocationManager: NSObject, ObservableObject {
         manager.distanceFilter = 50
     }
 
+    /// Bed om adgang og/eller hent en enkelt lokation, hvis muligt
     func requestWhenInUse() {
-        if status == .notDetermined {
+        switch status {
+        case .notDetermined:
             manager.requestWhenInUseAuthorization()
-        } else if status == .authorizedWhenInUse || status == .authorizedAlways {
-            manager.requestLocation()
-        } else {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation() // one-shot
+        case .denied, .restricted:
             errorMessage = "Appen har ikke adgang til din placering. Aktivér det i Indstillinger."
+        @unknown default:
+            break
         }
     }
 
+    /// Manuelt refresh (one-shot)
     func refreshLocation() {
         manager.requestLocation()
     }
 }
 
-// MARK: - Delegate (nonisolated for Swift 6-compat)
+// MARK: - CLLocationManagerDelegate (nonisolated for Swift 6)
 extension LocationManager: CLLocationManagerDelegate {
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -44,9 +50,12 @@ extension LocationManager: CLLocationManagerDelegate {
             switch auth {
             case .authorizedWhenInUse, .authorizedAlways:
                 manager.requestLocation()
+                self.errorMessage = nil
             case .denied, .restricted:
                 self.errorMessage = "Placering nægtet. Giv adgang i Indstillinger > Privatliv > Placering."
-            default:
+            case .notDetermined:
+                break
+            @unknown default:
                 break
             }
         }
@@ -62,7 +71,6 @@ extension LocationManager: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // <- her var stavefejlen
         let msg = error.localizedDescription
         print("📍 Location error:", msg)
         Task { @MainActor in

@@ -17,9 +17,9 @@ struct SearchTab: View {
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                         .font(.body)
-                        .onChange(of: app.query, { newValue in
+                        .onChange(of: app.query) { newValue in
                             updateSuggestions(for: newValue)
-                        })
+                        }
                         .onSubmit { app.runSearch() }
 
                     if !app.query.isEmpty {
@@ -35,7 +35,10 @@ struct SearchTab: View {
                     }
                 }
                 .padding(14)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Theme.card)
+                )
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
@@ -88,7 +91,8 @@ struct SearchTab: View {
                         }
                     } else if let msg = app.errorMessage {
                         Section {
-                            Text(msg).foregroundStyle(Theme.text2)
+                            Text(msg)
+                                .foregroundStyle(Theme.text2)
                                 .listRowBackground(Theme.card)
                         } header: {
                             Text("Billigst i nærheden").foregroundStyle(Theme.text2)
@@ -142,8 +146,7 @@ struct SearchTab: View {
             .appBackground()
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // Kun én, tydelig ToolbarItem → ingen overload-ambiguity
+            .toolbar {                     // ÉN klar toolbar → ingen ambiguity
                 ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                 }

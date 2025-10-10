@@ -22,6 +22,11 @@
     <string>LaunchScreen</string>
     <key>UIMainStoryboardFile</key>
     <string>Main</string>
+
+    <!-- 📍 LOKATIONSTILLADELSE (NYT) -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>SmartKurv bruger din placering til at finde de billigste varer i nærheden af dig.</string>
+
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>armv7</string>

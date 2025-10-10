@@ -6,7 +6,7 @@ import Combine
 final class AppState: ObservableObject {
 
     // MARK: - Søg
-    @Published var query: String = ""                  
+    @Published var query: String = ""
     @Published var searchResults: [Product] = []
 
     // MARK: - Varianter og øko
@@ -27,15 +27,14 @@ final class AppState: ObservableObject {
     @Published var isFindingCheapest = false
     @Published var errorMessage: String?
 
-    /// Radius for “billigst nær mig” (meter)
+    /// Radius for “billigst nær mig” (meter) — gemt til senere udvidelse
     @Published var cheapestRadiusMeters: Double = 2_000
 
     // MARK: - Lokation
     let locationManager = LocationManager()
 
     init() {
-        // Du kan evt. sætte din API-token her:
-        // PricingService.shared.apiTokenProvider = { Keychain.read("salling_api_token") ?? "" }
+        // Eksempel: PricingService.shared.apiTokenProvider = { Keychain.read("salling_api_token") ?? "" }
     }
 
     // MARK: - Søgning
@@ -118,10 +117,10 @@ final class AppState: ObservableObject {
         errorMessage = nil
         defer { isFindingCheapest = false }
 
+        // 🔧 MATCHER nu PricingService-signaturen uden radius:
         let res = await PricingService.shared.findCheapest(
             list: currentList,
-            location: location,
-            radiusMeters: cheapestRadiusMeters
+            location: location
         )
         cheapest = res
 
@@ -134,7 +133,7 @@ final class AppState: ObservableObject {
     func findCheapestNearby() async {
         locationManager.requestWhenInUse()
 
-        // Vent et øjeblik på opdatering
+        // Vent kort på en frisk lokation ved kold start
         let start = Date()
         while locationManager.lastLocation == nil && Date().timeIntervalSince(start) < 2.5 {
             try? await Task.sleep(nanoseconds: 150_000_000)
