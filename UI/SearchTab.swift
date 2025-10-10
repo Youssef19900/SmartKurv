@@ -144,24 +144,20 @@ struct SearchTab: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden) // mørk baggrund
+                .scrollContentBackground(.hidden)
             }
             .appBackground()
-            .toolbar(content: { searchToolbar })   // <- entydig overload
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("Søg")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.text1)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    CartBadgeButton()
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    // Entydig ToolbarContent (undgår ambiguous overload)
-    @ToolbarContentBuilder
-    private var searchToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Text("Søg")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.text1)
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            CartBadgeButton()
         }
     }
 
@@ -169,7 +165,6 @@ struct SearchTab: View {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; return }
 
-        // enkel autocomplete: top 5 der matcher
         let names = CatalogService.shared.all().map(\.name)
         suggestions = names
             .filter { $0.localizedCaseInsensitiveContains(t) }

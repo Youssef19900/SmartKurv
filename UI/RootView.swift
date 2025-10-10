@@ -23,7 +23,7 @@ struct RootView: View {
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem { Label("Indkøb", systemImage: "cart") }
-            .badge(tabBadge)  // <— brug explicit optional
+            .badgeIf(app.currentList.items.count)   // <- kun badge når > 0
             .tag(Tab.shopping)
 
             // HISTORIK
@@ -37,10 +37,16 @@ struct RootView: View {
         .tint(Theme.accent)
         .background(Theme.bgGradient.ignoresSafeArea())
     }
+}
 
-    // MARK: - Badge helper
-    private var tabBadge: Int? {
-        let c = app.currentList.items.count
-        return c == 0 ? nil : c
+// Viser kun badge hvis count > 0
+private extension View {
+    @ViewBuilder
+    func badgeIf(_ count: Int) -> some View {
+        if count > 0 {
+            self.badge(count)
+        } else {
+            self
+        }
     }
 }
