@@ -18,7 +18,7 @@ enum Theme {
     static let text2   = Color.secondary
 
     // Aksent
-    static let accent  = Color.systemBlue
+    static let accent  = Color.Blue
     static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
     static let warning = Color(red: 1.00, green: 0.75, blue: 0.15)
 }
