@@ -1,5 +1,3 @@
-import SwiftUI
-
 struct RootView: View {
     @EnvironmentObject var app: AppState
     @State private var tab: Tab = .search
@@ -7,31 +5,20 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-
-            // SØG
             NavigationStack { SearchTab() }
                 .tabItem { Label("Søg", systemImage: "magnifyingglass") }
                 .tag(Tab.search)
 
-            // INDKØB
             NavigationStack { ShoppingListTab() }
                 .tabItem { Label("Indkøb", systemImage: "cart") }
-                .badgeIf(app.currentList.items.reduce(0) { $0 + $1.qty }) // kun badge hvis > 0
+                .badge(app.cartItemCount == 0 ? nil : app.cartItemCount)
                 .tag(Tab.shopping)
 
-            // HISTORIK
             NavigationStack { HistoryTab() }
                 .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
                 .tag(Tab.history)
         }
-        .tint(Theme.accent)
-        .appBackground()
-    }
-}
-
-// Kun vis badge hvis count > 0
-private extension View {
-    @ViewBuilder func badgeIf(_ count: Int) -> some View {
-        if count > 0 { self.badge(count) } else { self }
+        .tint(.systemBlue)
+        .appBackground()              // solid white, respects safe areas
     }
 }
