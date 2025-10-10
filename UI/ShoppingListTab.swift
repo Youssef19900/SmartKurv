@@ -2,90 +2,105 @@ import SwiftUI
 
 struct ShoppingListTab: View {
     @EnvironmentObject var app: AppState
-    @State private var showCheapest = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
 
-                // Find billigst-knap
-                Button {
-                    Task {
-                        await app.findCheapestNearby()
-                        // Vis resultat kort, og flyt derefter listen til historik
-                        showCheapest = true
-                        app.commitCurrentListToHistory()
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkle.magnifyingglass")
-                        Text("Find billigst inden for 2 km")
-                    }
-                    .font(.subheadline.bold())
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14))
-                }
-                .disabled(app.isFindingCheapest || app.currentList.items.isEmpty)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-
-                // Resultatvisning (når vi lige har beregnet)
-                if app.isFindingCheapest {
-                    ProgressView("Beregner…")
-                        .padding(.horizontal, 16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else if showCheapest && !app.cheapest.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Billigst i nærheden")
-                            .font(.headline)
-                            .foregroundStyle(Theme.text2)
-                        ForEach(app.cheapest, id: \.storeName) { t in
-                            HStack {
-                                Text(t.storeName).foregroundStyle(Theme.text1)
-                                Spacer()
-                                Text(String(format: "%.2f kr", t.total))
-                                    .font(.headline)
-                            }
-                            .cardContainer()
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                } else if let msg = app.errorMessage {
-                    Text(msg).foregroundStyle(Theme.text2)
-                        .padding(.horizontal, 16)
-                }
-
-                // Selve listen
+                // LISTE
                 List {
-                    Section {
-                        ForEach(app.currentList.items) { item in
-                            HStack {
-                                Text(item.product.name).foregroundStyle(Theme.text1)
-                                Spacer()
-                                Text("x\(item.qty)").foregroundStyle(Theme.text2)
+                    if app.currentList.items.isEmpty {
+                        Text("Din liste er tom.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        Section {
+                            ForEach(app.currentList.items) { item in
+                                HStack {
+                                    Text(item.product.name)
+                                    Spacer()
+                                    Text("x\(item.qty)")
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                            .listRowBackground(Theme.card)
+                        } header: {
+                            HStack {
+                                Text("Din liste")
+                                Spacer()
+                                Text("\(app.currentList.items.reduce(0) { $0 + $1.qty }) varer")
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                    } header: {
-                        HStack {
-                            Text("Din liste")
-                            Spacer()
-                            Text("\(app.currentList.items.count) varer")
+                    }
+
+                    // BILLIGST I NÆRHEDEN (vises efter du trykker “Sammenlign priser”)
+                    if app.isFindingCheapest {
+                        Section("Prissammenligning") {
+                            HStack {
+                                ProgressView()
+                                Text("Finder priser i nærheden…")
+                            }
                         }
-                        .foregroundStyle(Theme.text2)
+                    } else if !app.cheapest.isEmpty {
+                        Section("Prissammenligning") {
+                            ForEach(app.cheapest, id: \.storeName) { t in
+                                HStack {
+                                    Text(t.storeName)
+                                    Spacer()
+                                    Text(String(format: "%.2f kr", t.total))
+                                        .font(.headline)
+                                }
+                            }
+                        }
+                    } else if let msg = app.errorMessage {
+                        Section("Prissammenligning") {
+                            Text(msg).foregroundColor(.secondary)
+                        }
                     }
                 }
-                .listStyle(.plain) // tættere layout
-                .scrollContentBackground(.hidden)
+                .listStyle(.insetGrouped)
+
+                // HANDLING-KNAPPER
+                VStack(spacing: 10) {
+                    Button {
+                        Task { await app.findCheapestNearby() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "chart.bar.xaxis")
+                            Text("Sammenlign priser i nærheden")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .disabled(app.currentList.items.isEmpty || app.isFindingCheapest)
+
+                    Button {
+                        app.commitCurrentListToHistory()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "tray.and.arrow.down.fill")
+                            Text("Gem i historik")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(app.currentList.items.isEmpty)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
             .navigationTitle("Indkøb")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { CartBadgeButton() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    CartBadgeButton()
+                }
             }
-            .appBackground()
+            .background(Color(.systemBackground))
         }
     }
 }
