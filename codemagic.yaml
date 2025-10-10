@@ -28,11 +28,12 @@ workflows:
         script: |
           set -euxo pipefail
           echo "== Checking for Assets.xcassets/AppIcon.appiconset =="
-          test -d "Assets.xcassets/AppIcon.appiconset"
-          ls -la Assets.xcassets/AppIcon.appiconset
-          # Valgfri sanity: kræv vigtige filer
+          APPICON_DIR="Assets.xcassets/AppIcon.appiconset"
+          test -d "$APPICON_DIR"
+          ls -la "$APPICON_DIR"
+          # Tjek vigtige filer (matcher dine faktiske filnavne)
           for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
-            if [ ! -f "Assets.xcassets/AppIcon.appiconset/$f" ]; then
+            if [ ! -f "$APPICON_DIR/$f" ]; then
               echo "❌ Missing $f in AppIcon.appiconset"
               exit 1
             fi
@@ -156,8 +157,8 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
 
-      # 🔐 Debug + login til App Store Connect via API-nøgler (fra 'smartkurv'-gruppen)
-      - name: Debug App Store Connect vars
+      # 🔐 Upload til TestFlight med eksplicitte API-nøgler (ingen 'login' kommando)
+      - name: Upload to TestFlight
         script: |
           set -euxo pipefail
           IPA="$CM_BUILD_DIR/exported/SmartKurv.ipa"
@@ -165,24 +166,16 @@ workflows:
           echo "APPLE_APP_ID=$APPLE_APP_ID"
           echo "APP_STORE_CONNECT_ISSUER_ID=${APP_STORE_CONNECT_ISSUER_ID:0:6}..."
           echo "APP_STORE_CONNECT_KEY_IDENTIFIER=${APP_STORE_CONNECT_KEY_IDENTIFIER:-<missing>}"
-          if [ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]; then
-            echo "✅ Private key present"
-          else
+          if [ -z "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]; then
             echo "❌ Missing APP_STORE_CONNECT_PRIVATE_KEY"
             exit 1
           fi
-          # (valgfrit) eksplicit login
-          app-store-connect login \
+          app-store-connect publish \
+            --apple-id "$APPLE_APP_ID" \
+            --path "$IPA" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
-
-      - name: Upload to TestFlight
-        script: |
-          set -euxo pipefail
-          app-store-connect publish \
-            --apple-id "$APPLE_APP_ID" \
-            --path "$CM_BUILD_DIR/exported/SmartKurv.ipa"
 
     artifacts:
       - "$CM_BUILD_DIR/exported/*.ipa"
