@@ -23,13 +23,38 @@ workflows:
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
 
-      # 🔎 Tjek at AppIcon-sættet er i repoet (fail tidligt hvis ikke)
+      # 🔎 Fail tidligt hvis AppIcon-sættet mangler
       - name: Verify AppIcon presence
         script: |
           set -euxo pipefail
           echo "== Checking for Assets.xcassets/AppIcon.appiconset =="
           test -d "Assets.xcassets/AppIcon.appiconset"
           ls -la Assets.xcassets/AppIcon.appiconset
+          # Valgfri sanity: kræv vigtige filer
+          for f in icon-60@2x.png icon-60@3x.png icon-1024.png; do
+            if [ ! -f "Assets.xcassets/AppIcon.appiconset/$f" ]; then
+              echo "❌ Missing $f in AppIcon.appiconset"
+              exit 1
+            fi
+          done
+          echo "✅ AppIcon files found"
+
+      # ✅ Sikr version/build og CFBundleIconName i kilde-plist
+      - name: Bump version & build + ensure CFBundleIconName
+        script: |
+          set -euxo pipefail
+          PLIST="Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
+          BUILD_NUM="$(date +%Y%m%d%H%M)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
+          echo "== Local plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST" || true
 
       - name: Import .p12 certificate
         script: |
@@ -54,6 +79,7 @@ workflows:
         script: |
           set -euxo pipefail
           PBX="SmartKurv.xcodeproj/project.pbxproj"
+          # Gør klar til manuel signering + ryd spor
           sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
           sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
           sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
@@ -62,26 +88,6 @@ workflows:
           echo "== Build settings =="
           xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
             grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
-
-      # ✅ Sæt unik version/build og tving AppIcon-nøglen i kilde-plist
-      - name: Bump version & build + ensure CFBundleIconName
-        script: |
-          set -euxo pipefail
-          PLIST="Info.plist"
-          # Marketing version
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
-          # Unikt buildnummer
-          BUILD_NUM="$(date +%Y%m%d%H%M)"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
-          # Tving AppIcon-navn ind
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
-          echo "== Local plist =="
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST" || true
 
       - name: Build archive (codesigned)
         script: |
@@ -99,7 +105,7 @@ workflows:
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             archive
 
-      # 🔍 Verificér at arkivet indeholder CFBundleIconName og AppIcon-filer
+      # 🔍 Verificér at arkivet har CFBundleIconName og AppIcon-filer
       - name: Verify plist & icons inside archive
         script: |
           set -euxo pipefail
@@ -108,8 +114,8 @@ workflows:
           echo "== Archive plist =="
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || echo "❌ Missing CFBundleIconName in archive!"
-          echo "== App bundle files (looking for AppIcon) =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PLIST" || (echo "❌ Missing CFBundleIconName in archive!" && exit 1)
+          echo "== App bundle (looking for AppIcon) =="
           ls -la "$APP_DIR" | grep -i appicon || true
 
       - name: Detect profile name & Write exportOptions.plist
@@ -149,6 +155,27 @@ workflows:
             -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
             -exportPath "$CM_BUILD_DIR/exported"
+
+      # 🔐 Debug + login til App Store Connect via API-nøgler (fra 'smartkurv'-gruppen)
+      - name: Debug App Store Connect vars
+        script: |
+          set -euxo pipefail
+          IPA="$CM_BUILD_DIR/exported/SmartKurv.ipa"
+          test -s "$IPA" || { echo "❌ IPA not found at $IPA"; exit 1; }
+          echo "APPLE_APP_ID=$APPLE_APP_ID"
+          echo "APP_STORE_CONNECT_ISSUER_ID=${APP_STORE_CONNECT_ISSUER_ID:0:6}..."
+          echo "APP_STORE_CONNECT_KEY_IDENTIFIER=${APP_STORE_CONNECT_KEY_IDENTIFIER:-<missing>}"
+          if [ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ]; then
+            echo "✅ Private key present"
+          else
+            echo "❌ Missing APP_STORE_CONNECT_PRIVATE_KEY"
+            exit 1
+          fi
+          # (valgfrit) eksplicit login
+          app-store-connect login \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
 
       - name: Upload to TestFlight
         script: |
