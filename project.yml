@@ -9,7 +9,7 @@ targets:
     deploymentTarget: "16.0"
 
     sources:
-      - path: SmartKurv
+      - path: AppCore
         optional: false
       - path: UI
         optional: false
