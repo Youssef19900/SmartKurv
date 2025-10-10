@@ -6,19 +6,20 @@ struct SearchTab: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // SØGEFELT I TOPPEN
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+
+                // SØGEFELT HELT I TOPPEN
+                HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Theme.text2)
+
                     TextField("Søg fx “banan”", text: $app.query)
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
-                        .onChange(of: app.query) { newValue in
-                            updateSuggestions(for: newValue)
-                        }
-                        .onSubmit {
-                            app.runSearch()
-                        }
+                        .font(.body)
+                        .onChange(of: app.query) { updateSuggestions(for:) }
+                        .onSubmit { app.runSearch() }
+
                     if !app.query.isEmpty {
                         Button {
                             app.query = ""
@@ -26,68 +27,145 @@ struct SearchTab: View {
                             suggestions = []
                         } label: {
                             Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Theme.text2)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(12)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .padding([.horizontal, .top])
+                .padding(14)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Theme.divider)
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
-                // RESULTATER / SUGGESTIONS
+                // KNAP: FIND BILLIGST INDEN FOR 2 KM
+                Button {
+                    Task { await app.findCheapestNearby() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                        Text("Find billigst inden for 2 km")
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .disabled(app.isFindingCheapest || app.currentList.items.isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+
+                // RESULTATER / SUGGESTIONS / BILLIGST
                 List {
-                    if suggestions.count > 0 && app.searchResults.isEmpty {
+                    // BILLIGST-SEKTION (progress / resultater / fejl)
+                    if app.isFindingCheapest {
+                        Section {
+                            HStack {
+                                ProgressView("Beregner…")
+                                Spacer()
+                            }
+                            .listRowBackground(Theme.card)
+                        } header: {
+                            Text("Billigst i nærheden")
+                                .foregroundStyle(Theme.text2)
+                        }
+                    } else if !app.cheapest.isEmpty {
+                        Section {
+                            ForEach(app.cheapest, id: \.storeName) { t in
+                                HStack {
+                                    Text(t.storeName)
+                                        .foregroundStyle(Theme.text1)
+                                    Spacer()
+                                    Text(String(format: "%.2f kr", t.total))
+                                        .font(.headline)
+                                        .foregroundStyle(Theme.text1)
+                                }
+                                .padding(.vertical, 4)
+                                .listRowBackground(Theme.card)
+                            }
+                        } header: {
+                            Text("Billigst i nærheden")
+                                .foregroundStyle(Theme.text2)
+                        }
+                    } else if let msg = app.errorMessage {
+                        Section {
+                            Text(msg)
+                                .foregroundStyle(Theme.text2)
+                                .listRowBackground(Theme.card)
+                        } header: {
+                            Text("Billigst i nærheden")
+                                .foregroundStyle(Theme.text2)
+                        }
+                    }
+
+                    // FORSLAG (kun når der ingen søgningeresultater er)
+                    if !suggestions.isEmpty && app.searchResults.isEmpty {
                         Section("Forslag") {
                             ForEach(suggestions, id: \.self) { s in
-                                Button(s) {
+                                Button {
                                     app.query = s
                                     app.runSearch()
+                                } label: {
+                                    Text(s).foregroundStyle(Theme.text1)
                                 }
+                                .listRowBackground(Theme.card)
                             }
                         }
                     }
 
+                    // SØGERESULTATER
                     Section("Resultater") {
                         ForEach(app.searchResults, id: \.id) { product in
-                            HStack {
+                            HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(product.name)
                                         .font(.headline)
+                                        .foregroundStyle(Theme.text1)
                                     Text(product.variants.first?.displayName ?? "")
                                         .font(.subheadline)
                                         .foregroundStyle(Theme.text2)
                                 }
                                 Spacer()
                                 Button {
-                                    let variant = app.defaultVariant(for: product)
-                                    app.addToList(product: product, variant: variant)
+                                    let v = app.defaultVariant(for: product)
+                                    app.addToList(product: product, variant: v)
                                 } label: {
                                     Image(systemName: "plus.circle.fill")
-                                        .imageScale(.large)
+                                        .font(.title3)
                                 }
                                 .buttonStyle(.plain)
                             }
-                            .contentShape(Rectangle())
+                            .listRowBackground(Theme.card)
                         }
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden) // mørk baggrund
             }
-            .navigationTitle("Søg")
+            .appBackground()
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("Søg")
+                        .font(.title2.bold())             // mindre end default kæmpe-titel
+                        .foregroundStyle(Theme.text1)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
+                    CartBadgeButton()                    // badge-knap
                 }
             }
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .background(Theme.bgGradient.ignoresSafeArea())
     }
 
     private func updateSuggestions(for text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; return }
-        // Meget simpel “autocomplete”: tag de første 5 fra katalog der matcher
+
+        // enkel autocomplete: top 5 der matcher
         let names = CatalogService.shared.all().map(\.name)
         suggestions = names
             .filter { $0.localizedCaseInsensitiveContains(t) }

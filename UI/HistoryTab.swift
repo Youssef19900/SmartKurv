@@ -5,31 +5,64 @@ struct HistoryTab: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(app.history) { list in
-                    Section(header: Text(list.createdAt, style: .date)) {
-                        ForEach(list.items) { item in
-                            HStack {
-                                Text(item.product.name)
-                                Spacer()
-                                Text("x\(item.qty)")
-                                    .foregroundStyle(Theme.text2)
+            Group {
+                if app.history.isEmpty {
+                    // TOM-STATE
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 44))
+                            .foregroundStyle(Theme.text2)
+                        Text("Ingen historik endnu")
+                            .font(.headline)
+                            .foregroundStyle(Theme.text2)
+                        Text("Når du fuldfører en liste, dukker den op her.")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.text2.opacity(0.8))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // LISTE
+                    List {
+                        ForEach(app.history) { list in
+                            Section {
+                                ForEach(list.items) { item in
+                                    HStack(spacing: 12) {
+                                        Text(item.product.name)
+                                            .font(.headline)
+                                            .foregroundStyle(Theme.text1)
+                                        Spacer()
+                                        Text("x\(item.qty)")
+                                            .font(.headline)
+                                            .foregroundStyle(Theme.text2)
+                                    }
+                                    .listRowBackground(Theme.card)
+                                }
+                            } header: {
+                                HStack {
+                                    Text(list.createdAt, style: .date)
+                                    Spacer()
+                                    Text("\(list.items.count) varer")
+                                }
+                                .foregroundStyle(Theme.text2)
                             }
                         }
                     }
+                    .listStyle(.insetGrouped)
+                    .scrollContentBackground(.hidden)
                 }
             }
-            .navigationTitle("Historik")
-            .toolbar(content: historyToolbar)   // <- eksplicit content-funktion
-        }
-        .background(Theme.bgGradient.ignoresSafeArea())
-    }
-
-    // Gør det tydeligt for compileren at dette er ToolbarContent
-    @ToolbarContentBuilder
-    private func historyToolbar() -> some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            CartBadgeButton()
+            .appBackground()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("Historik")
+                        .font(.title2.bold())
+                        .foregroundStyle(Theme.text1)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    CartBadgeButton()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

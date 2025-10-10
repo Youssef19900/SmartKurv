@@ -1,11 +1,29 @@
 import Foundation
 import CoreLocation
 
+// MARK: - Models brugt her
+// Antager at du allerede har disse i Models.swift.
+// Hvis ikke, så afkommentér nedenfor og brug dem.
+ /*
+ struct Store: Identifiable, Hashable {
+     var id: String
+     var name: String
+     var lat: Double
+     var lon: Double
+ }
+
+ struct StoreTotal: Identifiable, Hashable {
+     var id: String { storeName }
+     var storeName: String
+     var total: Double
+ }
+ */
+
 // Observations gemmes i cache/hukommelse
 private struct PriceObservation: Codable {
     let ean: String
     let storeId: String
-    let unitPrice: Double   // inkl. kampagne udjævnet til stykpris
+    let unitPrice: Double    // inkl. kampagne udjævnet til stykpris
     let deposit: Double
     let timestamp: Date
 }
@@ -16,7 +34,16 @@ final class PricingService {
 
     // MARK: – Konfig
     var apiTokenProvider: () -> String = { "" } // <-- Sæt via AppState/Keychain
-    private let session = URLSession(configuration: .default)
+    /// Hvor langt vi søger (meter)
+    var defaultRadius: Double = 2_000
+
+    // Session med kortere timeouts (vi spørger mange butikker hurtigt)
+    private lazy var session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 6
+        cfg.timeoutIntervalForResource = 10
+        return URLSession(configuration: cfg)
+    }()
 
     // in-memory cache (nulstilles ved app-genstart)
     private var cache: [String: PriceObservation] = [:] // key = "\(ean)|\(storeId)"
@@ -25,33 +52,48 @@ final class PricingService {
     private func chainFactor(name: String) -> Double {
         switch name.lowercased() {
         case "netto": return 0.96
+        case "rema 1000", "rema1000": return 0.98
         case "føtex", "foetex", "fotex": return 1.00
+        case "fakta": return 0.97
         default: return 1.00
         }
     }
 
     // MARK: – Offentlig API
 
-    /// Hovedfunktion: returnerer de 2 billigste butikker for en liste.
-    func findCheapest(list: ShoppingList, location: CLLocation?) async -> [StoreTotal] {
-        // TODO: Erstat med rigtige butikker fra Stores API + geo-filter på 'location'
-        let stores: [Store] = [
-            .init(id: "1234", name: "Netto", lat: 0, lon: 0),
-            .init(id: "5678", name: "Føtex", lat: 0, lon: 0)
-        ]
+    /// Hovedfunktion: find billigste butikker for en *hel liste* inden for radius fra brugerens lokation.
+    /// Returnerer de 2 billigste totals sorteret stigende.
+    func findCheapest(list: ShoppingList, location: CLLocation?, radiusMeters: Double? = nil) async -> [StoreTotal] {
 
+        // 0) Lille “AI-tænkepause” (føles naturligt at den lige beregner)
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // ~1 sek
+
+        // 1) Hent kandidat-butikker og filtrér på radius
+        let radius = radiusMeters ?? defaultRadius
+        let candidates = nearestStores(around: location, within: radius)
+
+        // 2) Parallel beregning pr. butik (hurtigt)
         var totals: [StoreTotal] = []
-
-        for store in stores {
-            var sum = 0.0
-            for item in list.items {
-                let unit = await unitPrice(for: item, in: store)
-                sum += unit * Double(item.qty)
+        await withTaskGroup(of: StoreTotal?.self) { group in
+            for store in candidates {
+                group.addTask { [weak self] in
+                    guard let self else { return nil }
+                    // summer alle varer for denne butik
+                    var sum = 0.0
+                    for item in list.items {
+                        let unit = await self.unitPrice(for: item, in: store)
+                        sum += unit * Double(item.qty)
+                    }
+                    let rounded = (sum * 100).rounded() / 100
+                    return StoreTotal(storeName: store.name, total: rounded)
+                }
             }
-            let rounded = (sum * 100).rounded() / 100
-            totals.append(StoreTotal(storeName: store.name, total: rounded))
+            for await maybe in group {
+                if let t = maybe { totals.append(t) }
+            }
         }
 
+        // 3) Vælg top-2 billigste
         return totals.sorted { $0.total < $1.total }.prefix(2).map { $0 }
     }
 
@@ -61,32 +103,33 @@ final class PricingService {
         // 1) EAN fra CatalogService (ean-map.json eller varianten selv)
         let ean = CatalogService.shared.ean(for: item.product, variant: item.variant)
 
-        // 2) Hvis ingen EAN → AI-estimat * kædefaktor
+        // 2) Hvis ingen EAN → heuristik * kædefaktor
         guard let ean else {
             let est = heuristicEstimate(product: item.product, variant: item.variant)
             return est * chainFactor(name: store.name)
         }
 
-        // 3) Cache
+        // 3) Cache (30 min)
         let key = "\(ean)|\(store.id)"
         if let hit = cache[key], Date().timeIntervalSince(hit.timestamp) < 60 * 30 {
-            return hit.unitPrice + hit.deposit // cache i 30 min
+            return hit.unitPrice + hit.deposit
         }
 
         // 4) Forsøg API
         if let apiPrice = await fetchFromAPI(ean: ean, storeId: store.id) {
             cache[key] = apiPrice
             // lær af den observerede pris
-            updatePrior(product: item.product, variant: item.variant, observed: apiPrice.unitPrice + apiPrice.deposit)
+            updatePrior(product: item.product, variant: item.variant,
+                        observed: apiPrice.unitPrice + apiPrice.deposit)
             return apiPrice.unitPrice + apiPrice.deposit
         }
 
-        // 5) Fallback: AI-estimat * kædefaktor
+        // 5) Fallback: heuristik * kædefaktor
         let est = heuristicEstimate(product: item.product, variant: item.variant)
         return est * chainFactor(name: store.name)
     }
 
-    // MARK: – Salling API
+    // MARK: – Salling API (pris for EAN i butik)
 
     private func fetchFromAPI(ean: String, storeId: String) async -> PriceObservation? {
         guard let url = buildURL(
@@ -96,16 +139,17 @@ final class PricingService {
 
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(apiTokenProvider())", forHTTPHeaderField: "Authorization")
+        let tok = apiTokenProvider()
+        if !tok.isEmpty {
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        }
 
         do {
             let (data, resp) = try await session.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-                // 401/403/404 → fald tilbage til heuristik
                 return nil
             }
 
-            // kun de felter vi bruger
             struct Resp: Codable {
                 struct Instore: Codable {
                     struct Campaign: Codable { let price: Double?; let quantity: Int? }
@@ -201,6 +245,28 @@ final class PricingService {
         let alpha = 0.3
         let newMean = (1 - alpha) * old + alpha * observed
         priors[key] = (newMean, alpha)
+    }
+
+    // MARK: - Butikker & radius
+
+    /// Simpel liste af butikker i DK (demo). Erstat med rigtigt Store-API hvis du har.
+    private func knownStores() -> [Store] {
+        [
+            .init(id: "netto-001", name: "Netto",  lat: 55.6761, lon: 12.5683),
+            .init(id: "rema-002",  name: "Rema 1000", lat: 55.6784, lon: 12.5710),
+            .init(id: "fotex-003", name: "Føtex", lat: 55.6740, lon: 12.5650)
+        ]
+    }
+
+    /// Filtrér butikker inden for radius fra en lokation (eller alle hvis lokation mangler).
+    private func nearestStores(around location: CLLocation?, within radius: Double) -> [Store] {
+        let all = knownStores()
+        guard let loc = location else { return all } // ingen GPS → prøv alle vi kender
+        return all.filter { store in
+            let d = CLLocation(latitude: store.lat, longitude: store.lon)
+                .distance(from: loc)
+            return d <= radius
+        }
     }
 }
 

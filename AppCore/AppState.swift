@@ -6,10 +6,10 @@ import Combine
 final class AppState: ObservableObject {
 
     // MARK: - Søg
-    @Published var query: String = ""                  // bruges i Views/Search
+    @Published var query: String = ""                  
     @Published var searchResults: [Product] = []
 
-    // Beholdt til UI der vælger enhed/øko pr. produkt
+    // MARK: - Varianter og øko
     @Published var selectedVariant: [String: ProductVariant] = [:]
     @Published var isOrganic: [String: Bool] = [:]
 
@@ -27,8 +27,16 @@ final class AppState: ObservableObject {
     @Published var isFindingCheapest = false
     @Published var errorMessage: String?
 
+    /// Radius for “billigst nær mig” (meter)
+    @Published var cheapestRadiusMeters: Double = 2_000
+
     // MARK: - Lokation
     let locationManager = LocationManager()
+
+    init() {
+        // Du kan evt. sætte din API-token her:
+        // PricingService.shared.apiTokenProvider = { Keychain.read("salling_api_token") ?? "" }
+    }
 
     // MARK: - Søgning
     func runSearch() {
@@ -37,12 +45,10 @@ final class AppState: ObservableObject {
         searchResults = CatalogService.shared.search(q)
     }
 
-    // Default-variant hvis brugeren ikke har valgt
     func defaultVariant(for product: Product) -> ProductVariant {
         product.variants.first ?? ProductVariant(unit: "stk", organic: false, ean: nil)
     }
 
-    // Brugeren ændrer enhed (hvis UI’et har enhedsvælger)
     func setUnit(for product: Product, unit: String) {
         let baseOrganic = isOrganic[product.id] ?? defaultVariant(for: product).organic
         let temp = ProductVariant(unit: unit, organic: baseOrganic, ean: nil)
@@ -54,7 +60,6 @@ final class AppState: ObservableObject {
         selectedVariant[product.id] = resolved
     }
 
-    // Brugeren toggler øko (hvis UI’et har øko-toggle)
     func toggleOrganic(for product: Product, value: Bool) {
         let baseUnit = (selectedVariant[product.id]?.unit) ?? defaultVariant(for: product).unit
         let temp = ProductVariant(unit: baseUnit, organic: value, ean: nil)
@@ -67,9 +72,7 @@ final class AppState: ObservableObject {
         isOrganic[product.id] = value
     }
 
-    // MARK: - Læg i kurven (primær – bruges når variant er kendt)
     func addToList(product: Product, variant: ProductVariant, qty: Int = 1) {
-        // Sørg for EAN hvis muligt (fra ean-map eller varianten selv)
         let resolvedEAN = CatalogService.shared.ean(for: product, variant: variant)
         let finalVariant = ProductVariant(unit: variant.unit, organic: variant.organic, ean: resolvedEAN)
 
@@ -82,13 +85,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    // Bekvemmelighed: tillad gamle kald uden variant
     func addToList(product: Product) {
         let v = selectedVariant[product.id] ?? defaultVariant(for: product)
         addToList(product: product, variant: v, qty: 1)
     }
 
-    // Ændr antal (+/-)
     func changeQty(itemID: UUID, delta: Int) {
         guard let idx = currentList.items.firstIndex(where: { $0.id == itemID }) else { return }
         currentList.items[idx].qty = max(0, currentList.items[idx].qty + delta)
@@ -97,7 +98,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    // Gem som handlet → historik
     func commitCurrentListToHistory() {
         guard !currentList.items.isEmpty else { return }
         let snapshot = ShoppingList(items: currentList.items, createdAt: Date())
@@ -106,11 +106,40 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Find billigst
+
     func findCheapest(location: CLLocation?) async {
+        guard !currentList.items.isEmpty else {
+            errorMessage = "Din liste er tom."
+            cheapest = []
+            return
+        }
+
         isFindingCheapest = true
         errorMessage = nil
         defer { isFindingCheapest = false }
-        let res = await PricingService.shared.findCheapest(list: currentList, location: location)
+
+        let res = await PricingService.shared.findCheapest(
+            list: currentList,
+            location: location,
+            radiusMeters: cheapestRadiusMeters
+        )
         cheapest = res
+
+        if res.isEmpty {
+            errorMessage = "Kunne ikke finde priser i nærheden."
+        }
+    }
+
+    /// Automatisk: find nuværende placering og beregn billigste
+    func findCheapestNearby() async {
+        locationManager.requestWhenInUse()
+
+        // Vent et øjeblik på opdatering
+        let start = Date()
+        while locationManager.lastLocation == nil && Date().timeIntervalSince(start) < 2.5 {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+
+        await findCheapest(location: locationManager.lastLocation)
     }
 }
