@@ -31,7 +31,7 @@ workflows:
           test -d "Assets.xcassets/AppIcon.appiconset"
           ls -la Assets.xcassets/AppIcon.appiconset
           # Valgfri sanity: kræv vigtige filer
-          for f in icon-60@2x.png icon-60@3x.png icon-1024.png; do
+          for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
             if [ ! -f "Assets.xcassets/AppIcon.appiconset/$f" ]; then
               echo "❌ Missing $f in AppIcon.appiconset"
               exit 1
