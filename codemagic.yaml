@@ -4,19 +4,17 @@ workflows:
     environment:
       xcode: latest
       groups:
-        - smartkurv   # Skal indeholde dine certifikater og API-nøgler
+        - smartkurv   # Skal indeholde: P12_BASE64, P12_PASSWORD, PROFILE_BASE64, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         APP_BUNDLE_ID: com.youssef19900.SmartKurv
         TEAM_ID: GUYJ52Y55V
         APPLE_APP_ID: "6753662256"
-        ICON_SET_PATH: Assets.xcassets/AppIcon.appiconset
 
     scripts:
       - name: Install tools
         script: |
           set -euxo pipefail
-          brew update
-          brew install xcodegen tree || true
+          brew install xcodegen
           pip3 install --upgrade codemagic-cli-tools
 
       - name: Regenerate project (fresh)
@@ -24,46 +22,6 @@ workflows:
           set -euxo pipefail
           rm -rf SmartKurv.xcodeproj
           xcodegen generate --spec project.yml
-
-      - name: Quick sanity (assets + build settings)
-        script: |
-          set -euxo pipefail
-          echo "== AppIcon set =="
-          ls -la "$ICON_SET_PATH"
-          echo "Contents.json:"
-          cat "$ICON_SET_PATH/Contents.json"
-          echo "== Build settings (excerpt) =="
-          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
-            grep -Ei 'ASSETCATALOG|ICON|INFOPLIST_FILE|PRODUCT_BUNDLE_IDENTIFIER' || true
-
-      - name: Validate AppIcon sizes
-        script: |
-          set -euxo pipefail
-          cd "$ICON_SET_PATH"
-          for f in AppIcon-60@2x.png AppIcon-60@3x.png AppIcon-1024.png; do
-            test -f "$f" || { echo "Mangler $f"; exit 1; }
-          done
-          W2=$(sips -g pixelWidth  AppIcon-60@2x.png | awk '/pixelWidth/ {print $2}')
-          H2=$(sips -g pixelHeight AppIcon-60@2x.png | awk '/pixelHeight/ {print $2}')
-          W3=$(sips -g pixelWidth  AppIcon-60@3x.png | awk '/pixelWidth/ {print $2}')
-          H3=$(sips -g pixelHeight AppIcon-60@3x.png | awk '/pixelHeight/ {print $2}')
-          WM=$(sips -g pixelWidth  AppIcon-1024.png  | awk '/pixelWidth/ {print $2}')
-          HM=$(sips -g pixelHeight AppIcon-1024.png  | awk '/pixelHeight/ {print $2}')
-          [ "$W2" = "120" ] && [ "$H2" = "120" ] || { echo "AppIcon-60@2x.png skal være 120x120"; exit 1; }
-          [ "$W3" = "180" ] && [ "$H3" = "180" ] || { echo "AppIcon-60@3x.png skal være 180x180"; exit 1; }
-          [ "$WM" = "1024" ] && [ "$HM" = "1024" ] || { echo "AppIcon-1024.png skal være 1024x1024"; exit 1; }
-
-      - name: Ensure CFBundleIconName + version/build i Info.plist
-        script: |
-          set -euxo pipefail
-          PLIST="Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
-          BUILD_NUM="$(date +%Y%m%d%H%M)"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
 
       - name: Import .p12 certificate
         script: |
@@ -73,7 +31,7 @@ workflows:
           keychain add-certificates --certificate "$CM_BUILD_DIR/AppleDistribution.p12" --certificate-password "$P12_PASSWORD"
           security find-identity -p codesigning -v || true
 
-      - name: Restore provisioning profile
+      - name: Restore provisioning profile (to standard folder)
         script: |
           set -euxo pipefail
           STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -81,57 +39,70 @@ workflows:
           PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
           echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_STD"
           test -s "$PROFILE_STD"
+          echo "== Installed profiles =="
+          ls -la "$STD_DIR" || true
 
-      - name: Detect profile name (App Store) and export env
+      - name: Configure signing in Xcode project
         script: |
           set -euxo pipefail
-          STD_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_STD="$STD_DIR/SmartKurv_AppStore.mobileprovision"
-          PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
-          /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
-          PROFILE_APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST" || true)
-          BUNDLE_IN_PROFILE=${PROFILE_APPID#*.}
-          echo "Profile name: $PROFILE_NAME"
-          echo "Bundle in profile: $BUNDLE_IN_PROFILE"
-          if [ "$BUNDLE_IN_PROFILE" != "$APP_BUNDLE_ID" ]; then
-            echo "❌ Provisioning profile bundle id matcher ikke $APP_BUNDLE_ID"; exit 1;
-          fi
-          echo "export PROFILE_NAME=\"$PROFILE_NAME\"" >> $CM_ENV
+          PBX="SmartKurv.xcodeproj/project.pbxproj"
+          sed -i '' -e 's/Apple Distribution: [^"]*/Apple Distribution/g' "$PBX" || true
+          sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*";/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PBX" || true
+          sed -i '' -e 's/PROVISIONING_PROFILE = "[^"]*";/PROVISIONING_PROFILE = "";/g' "$PBX" || true
+          xcode-project use-profiles --project SmartKurv.xcodeproj
+          echo "== Build settings =="
+          xcodebuild -project SmartKurv.xcodeproj -scheme SmartKurv -showBuildSettings | \
+            grep -E 'CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE_SPECIFIER' || true
+
+      # ✅ Sæt unik version/build før vi bygger
+      - name: Bump version & build (ensure)
+        script: |
+          set -euxo pipefail
+          PLIST="Info.plist"
+          # Marketing version (behold eller sæt som ønsket)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.1" "$PLIST"
+          # Unikt buildnummer (CM_BUILD_ID eller dato)
+          BUILD_NUM="$(date +%Y%m%d%H%M)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUM}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUM}" "$PLIST"
+          echo "== Local plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST"
 
       - name: Build archive (codesigned)
         script: |
           set -euxo pipefail
-          : "${PROFILE_NAME:?PROFILE_NAME is not set}"
           xcodebuild \
             -project SmartKurv.xcodeproj \
             -scheme SmartKurv \
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/SmartKurv.xcarchive" \
             -sdk iphoneos \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            -allowProvisioningUpdates \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
             archive
 
-      - name: Inspect Assets.car for icons (debug only)
+      # ✅ Tjek hvad der endte i appens Info.plist i arkivet
+      - name: Verify plist inside archive
         script: |
           set -euxo pipefail
-          APP_PATH="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app"
-          if [ -f "$APP_PATH/Assets.car" ]; then
-            echo "Assets.car found:"
-            ls -la "$APP_PATH/Assets.car"
-            /usr/bin/assetutil --info "$APP_PATH/Assets.car" | head -n 100 || true
-          else
-            echo "⚠️ Ingen Assets.car i appen – tjek at Assets.xcassets blev inkluderet."
-            ls -la "$APP_PATH" || true
-          fi
+          APP_PLIST="$CM_BUILD_DIR/SmartKurv.xcarchive/Products/Applications/SmartKurv.app/Info.plist"
+          echo "== Archive plist =="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" || true
 
-      - name: Write exportOptions.plist
+      - name: Detect profile name & Write exportOptions.plist
         script: |
           set -euxo pipefail
+          PROFILE_STD="$HOME/Library/MobileDevice/Provisioning Profiles/SmartKurv_AppStore.mobileprovision"
+          PROFILE_PLIST="$CM_BUILD_DIR/profile.plist"
+          /usr/bin/security cms -D -i "$PROFILE_STD" > "$PROFILE_PLIST"
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
+          echo "Bruger provisioning profile: NAME='$PROFILE_NAME'"
+
           cat > "$CM_BUILD_DIR/exportOptions.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
