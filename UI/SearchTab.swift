@@ -17,7 +17,9 @@ struct SearchTab: View {
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                         .font(.body)
-                        .onChange(of: app.query) { updateSuggestions(for:) }
+                        .onChange(of: app.query, { newValue in
+                            updateSuggestions(for: newValue)
+                        })
                         .onSubmit { app.runSearch() }
 
                     if !app.query.isEmpty {
@@ -34,10 +36,6 @@ struct SearchTab: View {
                 }
                 .padding(14)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Theme.divider)
-                )
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
@@ -70,15 +68,13 @@ struct SearchTab: View {
                             }
                             .listRowBackground(Theme.card)
                         } header: {
-                            Text("Billigst i nærheden")
-                                .foregroundStyle(Theme.text2)
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
                         }
                     } else if !app.cheapest.isEmpty {
                         Section {
                             ForEach(app.cheapest, id: \.storeName) { t in
                                 HStack {
-                                    Text(t.storeName)
-                                        .foregroundStyle(Theme.text1)
+                                    Text(t.storeName).foregroundStyle(Theme.text1)
                                     Spacer()
                                     Text(String(format: "%.2f kr", t.total))
                                         .font(.headline)
@@ -88,21 +84,18 @@ struct SearchTab: View {
                                 .listRowBackground(Theme.card)
                             }
                         } header: {
-                            Text("Billigst i nærheden")
-                                .foregroundStyle(Theme.text2)
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
                         }
                     } else if let msg = app.errorMessage {
                         Section {
-                            Text(msg)
-                                .foregroundStyle(Theme.text2)
+                            Text(msg).foregroundStyle(Theme.text2)
                                 .listRowBackground(Theme.card)
                         } header: {
-                            Text("Billigst i nærheden")
-                                .foregroundStyle(Theme.text2)
+                            Text("Billigst i nærheden").foregroundStyle(Theme.text2)
                         }
                     }
 
-                    // FORSLAG (kun når der ingen søgningeresultater er)
+                    // FORSLAG (kun når der ingen søgeresultater er)
                     if !suggestions.isEmpty && app.searchResults.isEmpty {
                         Section("Forslag") {
                             ForEach(suggestions, id: \.self) { s in
@@ -147,17 +140,14 @@ struct SearchTab: View {
                 .scrollContentBackground(.hidden)
             }
             .appBackground()
+            .navigationTitle("Søg")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Søg")
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.text1)
-                }
+                // Kun én, tydelig ToolbarItem → ingen overload-ambiguity
                 ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
