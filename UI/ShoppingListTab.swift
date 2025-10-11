@@ -20,12 +20,11 @@ struct ShoppingListTab: View {
 
     @ViewBuilder
     private var content: some View {
-        let items = app.currentList.items  // træk ud så type-checker har det nemt
-
-        if items.isEmpty {
+        // ❌ Fjern "let items = ..." her – det er ikke en View.
+        if app.currentList.items.isEmpty {
             EmptyStateView()
         } else {
-            SimpleListView(items: items)
+            SimpleListView(items: app.currentList.items)
         }
     }
 }
@@ -48,12 +47,13 @@ private struct EmptyStateView: View {
 }
 
 private struct SimpleListView: View {
-    let items: [ShoppingListItem]   // Tilpas typen hvis din model hedder anderledes
+    let items: [ShoppingListItem]   // Sørg for at ShoppingListItem er Identifiable
 
     var body: some View {
         List {
             Section("Indkøbsliste") {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                // ✅ Idiomatisk ForEach
+                ForEach(items) { item in
                     Row(item: item)
                         .listRowBackground(Theme.card)
                 }
@@ -66,7 +66,7 @@ private struct SimpleListView: View {
 }
 
 private struct Row: View {
-    let item: ShoppingListItem      // Tilpas typen hvis din model hedder anderledes
+    let item: ShoppingListItem
 
     var body: some View {
         HStack {
