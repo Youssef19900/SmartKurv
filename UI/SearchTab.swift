@@ -8,7 +8,6 @@ struct SearchTab: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                // Hel skærm
                 Theme.bg.ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 16) {
@@ -84,7 +83,7 @@ struct SearchTab: View {
                                     .stroke(Theme.divider, lineWidth: 1)
                             )
                             .padding(.horizontal, 24)
-                            .padding(.top, 72) // lige under søgefeltet
+                            .padding(.top, 72)
                             .shadow(radius: 6)
                         }
                     }
@@ -129,7 +128,6 @@ struct SearchTab: View {
                         .scrollContentBackground(.hidden)
                     }
                 }
-                .padding(.top, 0)
             }
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
@@ -147,10 +145,8 @@ struct SearchTab: View {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; showDropdown = false; return }
         let names = CatalogService.shared.all().map(\.name)
-        suggestions = names
-            .filter { $0.localizedCaseInsensitiveContains(t) }
-            .prefix(6)
-            .map { $0 }
+        suggestions = names.filter { $0.localizedCaseInsensitiveContains(t) }
+                           .prefix(6).map { $0 }
         showDropdown = !suggestions.isEmpty
     }
 }
