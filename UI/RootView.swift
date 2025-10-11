@@ -11,7 +11,7 @@ struct RootView: View {
     var body: some View {
         ZStack {
             // Brug Theme.bg hvis den findes, ellers system baggrund
-            (Theme.bg ?? Color(.systemBackground)).ignoresSafeArea()
+            (Theme.bg.ignoresSafeArea()
             
             TabView(selection: $selection) {
                 SearchTab()
