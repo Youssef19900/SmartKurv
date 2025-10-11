@@ -87,8 +87,8 @@ struct SearchTab: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 72)
                             .shadow(radius: 6)
-                            .zIndex(1)                               // <- ligger over
-                            .transition(.opacity.combined(with: .scale)) // pæn animation
+                            .zIndex(1)
+                            .transition(.opacity.combined(with: .scale))
                         }
                     }
 
@@ -136,19 +136,25 @@ struct SearchTab: View {
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // i nogle setups vurderes placeringen som 17.5+
+                // Saml knapper i en gruppe, så begge vises
                 if #available(iOS 17.5, *) {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        AIFindCheapestButton()
                         CartBadgeButton()
                     }
                 } else {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        AIFindCheapestButton()
                         CartBadgeButton()
                     }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Theme.bg, for: .navigationBar)
+        }
+        // Sheet til AI-resultater
+        .sheet(isPresented: $app.aiSheetOpen) {
+            AISuggestionsSheet().environmentObject(app)
         }
     }
 
@@ -161,5 +167,80 @@ struct SearchTab: View {
             .prefix(6)
             .map { $0 }
         showDropdown = !suggestions.isEmpty
+    }
+}
+
+// MARK: - “Find billigst (AI)” knap
+private struct AIFindCheapestButton: View {
+    @EnvironmentObject var app: AppState
+
+    var body: some View {
+        Button {
+            Task { await app.findCheapest(query: app.query) }
+        } label: {
+            HStack(spacing: 6) {
+                if app.isFindingCheapest {
+                    ProgressView()
+                }
+                Image(systemName: "bolt.badge.a")
+                Text("Find billigst")
+            }
+        }
+        .disabled(app.isFindingCheapest || app.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+}
+
+// MARK: - Sheet til AI-forslag
+private struct AISuggestionsSheet: View {
+    @EnvironmentObject var app: AppState
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if app.aiSuggestions.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "bolt.slash")
+                            .imageScale(.large)
+                            .font(.system(size: 36))
+                            .foregroundStyle(.secondary)
+                        Text("Ingen forslag")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                    .listRowSeparator(.hidden)
+                } else {
+                    Section("Billigste fundet") {
+                        ForEach(app.aiSuggestions) { s in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(s.itemName)
+                                        .font(.headline)
+                                    Text(s.bestStore)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    if let note = s.note, !note.isEmpty {
+                                        Text(note)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Text(String(format: "%.2f kr.", s.price))
+                                    .font(.headline)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("AI – Find billigst")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Luk") { app.aiSheetOpen = false }
+                }
+            }
+        }
     }
 }
