@@ -132,8 +132,15 @@ struct SearchTab: View {
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    CartBadgeButton()
+                // Fallback så det virker på iOS < 17
+                if #available(iOS 17.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        CartBadgeButton()
+                    }
+                } else {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        CartBadgeButton()
+                    }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
