@@ -23,7 +23,7 @@
     <key>UIMainStoryboardFile</key>
     <string>Main</string>
 
-    <!-- 📍 LOKATIONSTILLADELSE (NYT) -->
+    <!-- 📍 LOKATIONSTILLADELSE -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>SmartKurv bruger din placering til at finde de billigste varer i nærheden af dig.</string>
 
@@ -36,6 +36,10 @@
         <string>UIInterfaceOrientationPortrait</string>
     </array>
     <key>LSRequiresIPhoneOS</key>
+    <true/>
+
+    <!-- 👇 Dette gør, at appen kører i fuldskærm -->
+    <key>UIRequiresFullScreen</key>
     <true/>
 </dict>
 </plist>
