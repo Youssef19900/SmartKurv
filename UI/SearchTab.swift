@@ -8,26 +8,22 @@ struct SearchTab: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
+                // Hel skærm
+                Theme.bg.ignoresSafeArea()
 
-                // Lys baggrund – sikker for iOS 16
-                Color.white.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
 
-                VStack(alignment: .leading, spacing: 12) {
-
-                    // MARK: Søgefelt helt i toppen
+                    // SØGEFELT
                     ZStack(alignment: .topLeading) {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
+                                .foregroundStyle(Theme.text2)
 
                             TextField("Søg fx “banan”", text: $app.query)
                                 .textInputAutocapitalization(.never)
                                 .disableAutocorrection(true)
                                 .font(.body)
-                                .foregroundColor(.black)
-                                .onChange(of: app.query) { newValue in
-                                    updateSuggestions(for: newValue)
-                                }
+                                .onChange(of: app.query) { updateSuggestions(for: $0) }
                                 .onSubmit {
                                     showDropdown = false
                                     app.runSearch()
@@ -42,25 +38,22 @@ struct SearchTab: View {
                                     showDropdown = false
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
+                                        .foregroundStyle(Theme.text2)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
                         .padding(14)
-                        // iOS 16-kompatibel "card" + kant
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(white: 0.96))
-                        )
+                        .background(Theme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color(white: 0.88), lineWidth: 1)
+                                .stroke(Theme.divider, lineWidth: 1)
                         )
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
 
-                        // MARK: Dropdown med forslag
+                        // DROPDOWN
                         if showDropdown && !suggestions.isEmpty {
                             VStack(alignment: .leading, spacing: 0) {
                                 ForEach(suggestions, id: \.self) { s in
@@ -71,7 +64,7 @@ struct SearchTab: View {
                                     } label: {
                                         HStack {
                                             Text(s)
-                                                .foregroundColor(.black)
+                                                .foregroundStyle(Theme.text1)
                                                 .padding(.vertical, 10)
                                             Spacer()
                                         }
@@ -80,86 +73,84 @@ struct SearchTab: View {
                                     .buttonStyle(.plain)
 
                                     if s != suggestions.last {
-                                        Divider()
-                                            .background(Color(white: 0.88))
+                                        Divider().background(Theme.divider)
                                     }
                                 }
                             }
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Color(white: 0.96))
-                            )
+                            .background(Theme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(Color(white: 0.88), lineWidth: 1)
+                                    .stroke(Theme.divider, lineWidth: 1)
                             )
                             .padding(.horizontal, 24)
-                            .padding(.top, 72) // Lige under søgefeltet
+                            .padding(.top, 72) // lige under søgefeltet
                             .shadow(radius: 6)
                         }
                     }
 
-                    // MARK: Resultater
-                    List {
-                        Section(header:
-                            Text("Resultater")
-                                .foregroundColor(.gray)
-                        ) {
-                            ForEach(app.searchResults, id: \.id) { product in
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(product.name)
-                                            .font(.headline)
-                                            .foregroundColor(.black)
-                                        Text(product.variants.first?.displayName ?? "")
-                                            .font(.subheadline)
-                                            .foregroundColor(.gray)
+                    // RESULTATER
+                    if app.searchResults.isEmpty {
+                        Text("RESULTATER")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.text2)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 8)
+
+                        Spacer(minLength: 0)
+                    } else {
+                        List {
+                            Section("Resultater") {
+                                ForEach(app.searchResults, id: \.id) { product in
+                                    HStack(spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(product.name)
+                                                .font(.headline)
+                                                .foregroundStyle(Theme.text1)
+                                            Text(product.variants.first?.displayName ?? "")
+                                                .font(.subheadline)
+                                                .foregroundStyle(Theme.text2)
+                                        }
+                                        Spacer()
+                                        Button {
+                                            let v = app.defaultVariant(for: product)
+                                            app.addToList(product: product, variant: v)
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.title3)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    Spacer()
-                                    Button {
-                                        let v = app.defaultVariant(for: product)
-                                        app.addToList(product: product, variant: v)
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title3)
-                                    }
-                                    .buttonStyle(.plain)
+                                    .listRowBackground(Theme.card)
                                 }
-                                .listRowBackground(Color(white: 0.96))
                             }
                         }
+                        .listStyle(.insetGrouped)
+                        .scrollContentBackground(.hidden)
                     }
-                    .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden) // bevar hvid baggrund
                 }
+                .padding(.top, 0)
             }
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {                           // Entydig toolbar – ingen ambiguitet
+            .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                 }
             }
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
         }
-        .tint(.blue) // iOS16-sikker (undgå .systemBlue)
     }
 
-    // MARK: - Hjælpere
     private func updateSuggestions(for text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else {
-            suggestions = []
-            showDropdown = false
-            return
-        }
-
-        // Enkel autocomplete: top 6 der matcher
+        guard !t.isEmpty else { suggestions = []; showDropdown = false; return }
         let names = CatalogService.shared.all().map(\.name)
         suggestions = names
             .filter { $0.localizedCaseInsensitiveContains(t) }
             .prefix(6)
             .map { $0 }
-
         showDropdown = !suggestions.isEmpty
     }
 }
