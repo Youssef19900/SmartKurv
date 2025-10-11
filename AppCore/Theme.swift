@@ -1,36 +1,23 @@
 import SwiftUI
 
 enum Theme {
-    // Baggrunde
-    static let bg       = Color(.systemBackground)
-    static let card     = Color(.secondarySystemBackground)
+    static let bg      = Color(.systemBackground)
+    static let card    = Color(.secondarySystemBackground)
+    static let divider = Color(.separator)
 
-    // Linjer/tekst
-    static let divider  = Color(.separator)
-    static let text1    = Color.primary
-    static let text2    = Color.secondary
+    static let text1   = Color.primary
+    static let text2   = Color.secondary
 
-    // Accent
-    static let accent   = Color.blue
-
-    // Bruges nogle steder som "bgGradient"
-    static let bgGradient = LinearGradient(
-        colors: [Color(.systemBackground), Color(.systemBackground)],
-        startPoint: .top,
-        endPoint: .bottom
-    )
+    static let accent  = Color.blue
+    static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
+    static let warning = Color(red: 1.00, green: 0.75, blue: 0.15)
 }
 
-// iOS-16 sikker kort-stil (kan bruges i stedet for .fill/.stroke fra iOS 17)
 extension View {
-    func themedCard(cornerRadius: CGFloat = 14, lineWidth: CGFloat = 1) -> some View {
-        background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .foregroundColor(Theme.card)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Theme.divider, lineWidth: lineWidth)
-        )
+    @ViewBuilder
+    func themedListBackground() -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg)
     }
 }

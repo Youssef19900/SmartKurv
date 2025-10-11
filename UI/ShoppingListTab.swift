@@ -8,74 +8,55 @@ struct ShoppingListTab: View {
             ZStack {
                 Theme.bg.ignoresSafeArea()
 
-                VStack(spacing: 16) {
-                    if app.list.isEmpty {
-                        // Tom-tilstand
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Theme.card)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 64)
-                            .overlay(
+                if app.currentList.items.isEmpty {
+                    // Tom-tilstand
+                    VStack(spacing: 12) {
+                        Image(systemName: "cart")
+                            .font(.system(size: 36, weight: .regular))
+                            .foregroundStyle(Theme.text2)
+                        Text("Din indkøbsliste er tom")
+                            .font(.headline)
+                            .foregroundStyle(Theme.text1)
+                        Text("Søg efter varer og tilføj dem til listen.")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.text2)
+                    }
+                    .padding()
+                } else {
+                    List {
+                        Section("Indkøbsliste") {
+                            ForEach(app.currentList.items) { item in
                                 HStack {
-                                    Text("Din liste er tom.")
-                                        .foregroundStyle(Theme.text2)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.product.name)
+                                            .foregroundStyle(Theme.text1)
+                                        if let v = item.variant {
+                                            Text(v.displayName)
+                                                .font(.footnote)
+                                                .foregroundStyle(Theme.text2)
+                                        }
+                                    }
                                     Spacer()
-                                }
-                                .padding(.horizontal, 16)
-                            )
-                            .padding(.horizontal, 16)
-
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Theme.card.opacity(0.7))
-                            .frame(maxWidth: .infinity, minHeight: 120)
-                            .overlay(
-                                Text("Sammenlign priser i nærheden")
-                                    .foregroundStyle(Theme.text2)
-                                    .font(.headline)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 16)
-                            )
-                            .padding(.horizontal, 16)
-
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Theme.card.opacity(0.7))
-                            .frame(maxWidth: .infinity, minHeight: 80)
-                            .overlay(
-                                Text("Gem i historik")
-                                    .foregroundStyle(Theme.text2)
-                                    .font(.headline)
-                            )
-                            .padding(.horizontal, 16)
-
-                        Spacer(minLength: 0)
-                    } else {
-                        // Din rigtige liste
-                        List {
-                            ForEach(app.list, id: \.id) { item in
-                                HStack {
-                                    Text(item.product.name)
-                                    Spacer()
-                                    Text(item.variant.displayName)
+                                    Text("×\(item.qty)")
                                         .foregroundStyle(Theme.text2)
                                 }
                                 .listRowBackground(Theme.card)
                             }
-                            .onDelete(perform: app.deleteFromList)
+                            .onDelete { idx in
+                                app.removeItems(at: idx)
+                            }
                         }
-                        .listStyle(.insetGrouped)
-                        .scrollContentBackground(.hidden)
                     }
+                    .listStyle(.insetGrouped)
+                    .themedListBackground()
                 }
             }
             .navigationTitle("Indkøb")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     CartBadgeButton()
                 }
             }
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(Theme.bg, for: .navigationBar)
         }
     }
 }
