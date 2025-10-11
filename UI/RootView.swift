@@ -10,31 +10,26 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            Theme.bg.ignoresSafeArea()
-
+            // Brug Theme.bg hvis den findes, ellers system baggrund
+            (Theme.bg ?? Color(.systemBackground)).ignoresSafeArea()
+            
             TabView(selection: $selection) {
                 SearchTab()
                     .environmentObject(app)
-                    .tabItem {
-                        Label("Søg", systemImage: "magnifyingglass")
-                    }
+                    .tabItem { Label("Søg", systemImage: "magnifyingglass") }
                     .tag(AppTab.search)
 
                 ShoppingListTab()
                     .environmentObject(app)
-                    .tabItem {
-                        Label("Indkøb", systemImage: "cart")
-                    }
+                    .tabItem { Label("Indkøb", systemImage: "cart") }
                     .tag(AppTab.shopping)
 
                 HistoryTab()
                     .environmentObject(app)
-                    .tabItem {
-                        Label("Historik", systemImage: "clock.arrow.circlepath")
-                    }
+                    .tabItem { Label("Historik", systemImage: "clock.arrow.circlepath") }
                     .tag(AppTab.history)
             }
-            .tint(Theme.accent) // virker på iOS 16
+            .tint(Theme.accent) // virker på iOS 16+
         }
     }
 }
