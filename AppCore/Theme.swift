@@ -1,45 +1,36 @@
 import SwiftUI
 
 enum Theme {
-    // Baggrund (lys)
+    // Baggrunde
+    static let bg       = Color(.systemBackground)
+    static let card     = Color(.secondarySystemBackground)
+
+    // Linjer/tekst
+    static let divider  = Color(.separator)
+    static let text1    = Color.primary
+    static let text2    = Color.secondary
+
+    // Accent
+    static let accent   = Color.blue
+
+    // Bruges nogle steder som "bgGradient"
     static let bgGradient = LinearGradient(
-        colors: [
-            Color(.systemBackground),
-            Color(.secondarySystemBackground)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
+        colors: [Color(.systemBackground), Color(.systemBackground)],
+        startPoint: .top,
+        endPoint: .bottom
     )
-
-    // Overflader
-    static let card    = Color(.secondarySystemBackground)
-    static let divider = Color(.separator)
-
-    // Tekst
-    static let text1   = Color.primary
-    static let text2   = Color.secondary
-
-    // Farver
-    static let accent  = Color.blue
-    static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
-    static let warning = Color(red: 1.00, green: 0.75, blue: 0.15)
 }
 
-// Genbrugelige modifiers
+// iOS-16 sikker kort-stil (kan bruges i stedet for .fill/.stroke fra iOS 17)
 extension View {
-    func appBackground() -> some View {
-        background(Theme.bgGradient.ignoresSafeArea())
-    }
-
-    func cardContainer(corner: CGFloat = 14) -> some View {
-        padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .fill(Theme.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .stroke(Theme.divider)
-            )
+    func themedCard(cornerRadius: CGFloat = 14, lineWidth: CGFloat = 1) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .foregroundColor(Theme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Theme.divider, lineWidth: lineWidth)
+        )
     }
 }

@@ -27,8 +27,9 @@ struct SmartKurvApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(app)   // ✅ inject once here
+            // ✅ giv app videre til RootView
+            RootView(app: app)
+                .environmentObject(app)   // behold hvis under-views bruger @EnvironmentObject
         }
     }
 }
