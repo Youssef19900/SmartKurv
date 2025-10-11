@@ -9,6 +9,7 @@ struct SearchTab: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 Theme.bg.ignoresSafeArea()
+                    .onTapGesture { showDropdown = false } // luk ved tryk i baggrunden
 
                 VStack(alignment: .leading, spacing: 16) {
 
@@ -55,7 +56,8 @@ struct SearchTab: View {
                         // DROPDOWN
                         if showDropdown && !suggestions.isEmpty {
                             VStack(alignment: .leading, spacing: 0) {
-                                ForEach(suggestions, id: \.self) { s in
+                                ForEach(suggestions.indices, id: \.self) { i in
+                                    let s = suggestions[i]
                                     Button {
                                         app.query = s
                                         showDropdown = false
@@ -71,7 +73,7 @@ struct SearchTab: View {
                                     }
                                     .buttonStyle(.plain)
 
-                                    if s != suggestions.last {
+                                    if i < suggestions.count - 1 {
                                         Divider().background(Theme.divider)
                                     }
                                 }
@@ -85,6 +87,8 @@ struct SearchTab: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 72)
                             .shadow(radius: 6)
+                            .zIndex(1)                               // <- ligger over
+                            .transition(.opacity.combined(with: .scale)) // pæn animation
                         }
                     }
 
@@ -132,8 +136,8 @@ struct SearchTab: View {
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Fallback så det virker på iOS < 17
-                if #available(iOS 17.0, *) {
+                // i nogle setups vurderes placeringen som 17.5+
+                if #available(iOS 17.5, *) {
                     ToolbarItem(placement: .topBarTrailing) {
                         CartBadgeButton()
                     }
@@ -152,8 +156,10 @@ struct SearchTab: View {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; showDropdown = false; return }
         let names = CatalogService.shared.all().map(\.name)
-        suggestions = names.filter { $0.localizedCaseInsensitiveContains(t) }
-                           .prefix(6).map { $0 }
+        suggestions = names
+            .filter { $0.localizedCaseInsensitiveContains(t) }
+            .prefix(6)
+            .map { $0 }
         showDropdown = !suggestions.isEmpty
     }
 }
