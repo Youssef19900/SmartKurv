@@ -4,12 +4,13 @@ struct SearchTab: View {
     @EnvironmentObject var app: AppState
     @State private var suggestions: [String] = []
     @State private var showDropdown = false
+    @State private var showCheapestSheet = false     // <- sheet til AI-resultater
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
                 Theme.bg.ignoresSafeArea()
-                    .onTapGesture { showDropdown = false } // luk ved tryk i baggrunden
+                    .onTapGesture { showDropdown = false }
 
                 VStack(alignment: .leading, spacing: 16) {
 
@@ -136,15 +137,15 @@ struct SearchTab: View {
             .navigationTitle("Søg")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Saml knapper i en gruppe, så begge vises
+                // Begge knapper i højre side
                 if #available(iOS 17.5, *) {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        AIFindCheapestButton()
+                        aiButton
                         CartBadgeButton()
                     }
                 } else {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        AIFindCheapestButton()
+                        aiButton
                         CartBadgeButton()
                     }
                 }
@@ -152,12 +153,31 @@ struct SearchTab: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Theme.bg, for: .navigationBar)
         }
-        // Sheet til AI-resultater
-        .sheet(isPresented: $app.aiSheetOpen) {
-            AISuggestionsSheet().environmentObject(app)
+        // Sheet med AI-resultater/fejl
+        .sheet(isPresented: $showCheapestSheet) {
+            CheapestResultsSheet()
+                .environmentObject(app)
         }
     }
 
+    // MARK: - “Find billigst (AI)” knap
+    private var aiButton: some View {
+        Button {
+            Task {
+                await app.findCheapestNearby()
+                showCheapestSheet = true
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if app.isFindingCheapest { ProgressView() }
+                Image(systemName: "bolt.badge.a")
+                Text("Find billigst")
+            }
+        }
+        .disabled(app.isFindingCheapest || app.currentList.items.isEmpty)
+    }
+
+    // MARK: - Hjælpere
     private func updateSuggestions(for text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { suggestions = []; showDropdown = false; return }
@@ -170,77 +190,94 @@ struct SearchTab: View {
     }
 }
 
-// MARK: - “Find billigst (AI)” knap
-private struct AIFindCheapestButton: View {
-    @EnvironmentObject var app: AppState
-
-    var body: some View {
-        Button {
-            Task { await app.findCheapest(query: app.query) }
-        } label: {
-            HStack(spacing: 6) {
-                if app.isFindingCheapest {
-                    ProgressView()
-                }
-                Image(systemName: "bolt.badge.a")
-                Text("Find billigst")
-            }
-        }
-        .disabled(app.isFindingCheapest || app.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
-}
-
-// MARK: - Sheet til AI-forslag
-private struct AISuggestionsSheet: View {
+// MARK: - Sheet der viser resultater fra AppState.cheapest
+private struct CheapestResultsSheet: View {
     @EnvironmentObject var app: AppState
 
     var body: some View {
         NavigationStack {
-            List {
-                if app.aiSuggestions.isEmpty {
+            Group {
+                if let msg = app.errorMessage {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 42))
+                            .foregroundStyle(.orange)
+                        Text(msg)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .background(Theme.bg)
+                } else if app.cheapest.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "bolt.slash")
-                            .imageScale(.large)
-                            .font(.system(size: 36))
+                            .font(.system(size: 42))
                             .foregroundStyle(.secondary)
-                        Text("Ingen forslag")
-                            .font(.headline)
+                        Text("Ingen priser fundet i nærheden.")
                             .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 200)
-                    .listRowSeparator(.hidden)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .background(Theme.bg)
                 } else {
-                    Section("Billigste fundet") {
-                        ForEach(app.aiSuggestions) { s in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(s.itemName)
-                                        .font(.headline)
-                                    Text(s.bestStore)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    if let note = s.note, !note.isEmpty {
-                                        Text(note)
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
+                    List {
+                        Section("Billigste butikker") {
+                            ForEach(app.cheapest.indices, id: \.self) { i in
+                                let row = app.cheapest[i]
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(storeName(row))
+                                            .font(.headline)
+                                        if let d = distance(row) {
+                                            Text(String(format: "%.0f m væk", d))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
+                                    Spacer()
+                                    Text(priceString(row))
+                                        .font(.headline)
                                 }
-                                Spacer()
-                                Text(String(format: "%.2f kr.", s.price))
-                                    .font(.headline)
+                                .padding(.vertical, 4)
                             }
-                            .padding(.vertical, 4)
                         }
                     }
+                    .listStyle(.insetGrouped)
                 }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("AI – Find billigst")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Luk") { app.aiSheetOpen = false }
+                    Button("Luk") { /* sheet lukkes udefra */ }
                 }
             }
         }
+    }
+
+    // MARK: - Reflection: træk felter ud uden at kende præcis model
+    private func storeName(_ any: Any) -> String {
+        if let m = Mirror(reflecting: any).children.first(where: {
+            ["storeName","name","chain","store","merchant"].contains($0.label ?? "")
+        }), let s = m.value as? String {
+            return s
+        }
+        return "Butik"
+    }
+
+    private func distance(_ any: Any) -> Double? {
+        if let m = Mirror(reflecting: any).children.first(where: {
+            ["distance","distanceMeters","meters"].contains($0.label ?? "")
+        }), let v = m.value as? Double {
+            return v
+        }
+        return nil
+    }
+
+    private func priceString(_ any: Any) -> String {
+        if let m = Mirror(reflecting: any).children.first(where: {
+            ["total","price","sum","totalPrice"].contains($0.label ?? "")
+        }), let v = m.value as? Double {
+            return String(format: "%.2f kr.", v)
+        }
+        return "–"
     }
 }
